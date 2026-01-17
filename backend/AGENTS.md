@@ -1,0 +1,315 @@
+# Backend Module Guide (NestJS)
+
+**Location:** `backend/src/`
+**Port:** 3001
+
+---
+
+## Module Structure
+
+```
+backend/src/
+├── auth/           # JWT + NextAuth integration
+├── accounts/       # Account CRUD + hierarchy
+├── journal/        # Double-entry ledger
+├── query/          # Balance query engine
+├── rates/          # Exchange rate engine
+├── providers/      # Plugin system
+├── scheduler/      # Rate fetching cron
+├── budgets/        # Budget management
+├── reports/        # Financial statements
+├── tenants/        # Multi-tenant RLS
+├── currencies/     # Currency registry
+├── common/         # Shared utilities
+└── app.module.ts   # Root module
+```
+
+---
+
+## Module Responsibilities
+
+### auth/ (Authentication)
+
+**Handles:**
+- JWT token validation
+- User session management
+- Role-based access control
+- Authelia header processing
+
+**Key files:**
+- `auth.guard.ts` - JWT validation
+- `strategies/` - Passport strategies
+- `decorators/` - Auth decorators
+
+**Related:** `frontend/lib/auth-options.ts`
+
+---
+
+### accounts/ (Account Management)
+
+**Handles:**
+- CRUD operations for accounts
+- Hierarchical tree management
+- Path and depth computation
+- Parent/child relationships
+
+**Key files:**
+- `accounts.service.ts` - Business logic
+- `accounts.controller.ts` - REST endpoints
+- `entities/account.entity.ts` - TypeORM entity
+- `dto/` - Validation DTOs
+
+**Related:**
+- [Requirements - Core Features](../docs/requirements/REQUIREMENTS_CORE.md)
+- [Requirements - Database](../docs/requirements/REQUIREMENTS_DATABASE.md)
+
+---
+
+### journal/ (Journal Entries)
+
+**Handles:**
+- Double-entry bookkeeping
+- Transaction validation (balance check)
+- Multi-currency support
+- Tag management
+
+**Key files:**
+- `journal.service.ts` - Entry management
+- `journal.controller.ts` - REST endpoints
+- `entities/` - Entry and line entities
+- `validators/` - Balance validation
+
+**Related:**
+- [Requirements - Core Features](../docs/requirements/REQUIREMENTS_CORE.md#journal-entries)
+- [Requirements - API](../docs/requirements/REQUIREMENTS_API.md#journal-management-api)
+
+---
+
+### query/ (Query Engine)
+
+**Handles:**
+- Balance queries with depth
+- Transaction search
+- Pagination and filtering
+- Cache management
+
+**Key files:**
+- `query.service.ts` - Query logic
+- `query.controller.ts` - Query endpoints
+- `cache/` - Redis/memory caching
+
+**Related:**
+- [Requirements - Query Engine](../docs/requirements/REQUIREMENTS_QUERY_ENGINE.md)
+
+---
+
+### rates/ (Exchange Rates)
+
+**Handles:**
+- Rate retrieval and storage
+- Currency conversion
+- Historical rate queries
+- Rate caching
+
+**Key files:**
+- `rates.service.ts` - Rate operations
+- `rates.controller.ts` - REST endpoints
+- `entities/exchange-rate.entity.ts`
+
+**Related:**
+- [Requirements - Multi-Currency](../docs/requirements/REQUIREMENTS_MULTI_CURRENCY.md)
+
+---
+
+### providers/ (Plugin System)
+
+**Handles:**
+- JS plugin loading
+- REST API provider configuration
+- Provider lifecycle management
+- Hot-reload on config change
+
+**Key files:**
+- `providers.service.ts` - Provider management
+- `plugins/` - Plugin loader
+- `rest-api-provider.ts` - REST provider impl
+
+**Related:**
+- [Requirements - Plugin System](../docs/requirements/REQUIREMENTS_PLUGIN_SYSTEM.md)
+
+---
+
+### scheduler/ (Cron Jobs)
+
+**Handles:**
+- Scheduled rate fetching
+- Provider health checks
+- Cache expiration
+
+**Key files:**
+- `scheduler.service.ts` - Cron jobs
+- `decorators/` - @Interval, @Cron
+
+---
+
+### budgets/ (Budget Management)
+
+**Handles:**
+- Budget CRUD
+- Progress tracking
+- Alert generation
+
+**Key files:**
+- `budgets.service.ts` - Budget logic
+- `budgets.controller.ts` - REST endpoints
+- `entities/budget.entity.ts`
+
+**Related:**
+- [Requirements - Budgets](../docs/requirements/REQUIREMENTS_BUDGETS.md)
+
+---
+
+### reports/ (Financial Reports)
+
+**Handles:**
+- Balance sheet generation
+- Income statement generation
+- Report caching
+
+**Key files:**
+- `reports.service.ts` - Report generation
+- `reports.controller.ts` - Report endpoints
+
+**Related:**
+- [Requirements - Reports](../docs/requirements/REQUIREMENTS_REPORTS.md)
+
+---
+
+### tenants/ (Multi-Tenancy)
+
+**Handles:**
+- Tenant isolation
+- RLS context management
+- Tenant settings
+
+**Key files:**
+- `tenants.service.ts` - Tenant operations
+- `middleware/` - RLS middleware
+
+**Related:**
+- [Requirements - Database RLS](../docs/requirements/REQUIREMENTS_DATABASE.md#row-level-security)
+
+---
+
+### currencies/ (Currency Registry)
+
+**Handles:**
+- Currency CRUD
+- Currency validation
+- Decimal place management
+
+**Key files:**
+- `currencies.service.ts` - Currency operations
+- `currencies.controller.ts` - REST endpoints
+
+**Related:**
+- [Requirements - Multi-Currency](../docs/requirements/REQUIREMENTS_MULTI_CURRENCY.md#currency-registry)
+
+---
+
+## Common Utilities
+
+### common/ directory
+
+| Directory | Purpose |
+|-----------|---------|
+| `decorators/` | Custom decorators (@User, @Tenant) |
+| `filters/` | Exception filters |
+| `guards/` | Auth guards |
+| `interceptors/` | Response formatting |
+| `pipes/` | Validation pipes |
+
+---
+
+## Development Conventions
+
+### Module Pattern
+
+Each feature module follows:
+```
+src/{feature}/
+├── {feature}.module.ts    # Module definition
+├── {feature}.service.ts   # Business logic
+├── {feature}.controller.ts # REST endpoints
+├── entities/             # TypeORM entities
+├── dto/                  # Input validation
+└── {feature}.spec.ts     # Tests
+```
+
+### Entity Design
+
+- Use UUID for primary keys
+- Add `created_at`, `updated_at`, `deleted_at`
+- Use `Decimal` for money, not `float`
+- Index foreign keys and frequently queried columns
+
+### DTO Pattern
+
+```typescript
+// Create DTO
+export class CreateAccountDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  name: string;
+
+  @IsEnum(AccountType)
+  type: AccountType;
+
+  @IsString()
+  @IsOptional()
+  parent_id?: string;
+
+  @IsString()
+  currency: string;
+}
+```
+
+### Testing
+
+- Unit tests: `*.spec.ts` files
+- Integration tests: `*.e2e-spec.ts` files
+- Use Jest framework
+- Mock external dependencies
+
+---
+
+## Commands
+
+```bash
+# Development
+cd backend
+npm run start:dev       # Watch mode
+npm run start           # Normal mode
+npm run build           # Production build
+
+# Testing
+npm run test            # Unit tests
+npm run test:e2e        # E2E tests
+npm run test:coverage   # Coverage report
+
+# Database
+npm run migration:generate -- -n Name
+npm run migration:run
+npm run migration:revert
+```
+
+---
+
+## Anti-Patterns
+
+- **NEVER** expose raw TypeORM entities → use DTOs
+- **NEVER** skip validation → use class-validator
+- **NEVER** hard delete → use `deleted_at`
+- **NEVER** bypass RLS → always use tenant filter
+- **NEVER** use `float` for money → use `decimal`
