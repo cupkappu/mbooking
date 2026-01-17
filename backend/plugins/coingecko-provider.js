@@ -120,6 +120,146 @@ module.exports = {
     }
   },
 
+  async getLatestRate(from, to) {
+    const config = this.config || {};
+    const timeout = config.timeout || 15000;
+    const vsCurrency = (config.vs_currency || 'usd').toLowerCase();
+
+    const fromId = this.id_mapping[from];
+    const toId = this.id_mapping[to];
+
+    if (!fromId || !toId) {
+      throw new Error(`Unsupported currency pair: ${from}/${to}`);
+    }
+
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${fromId}&vs_currencies=${toId}`;
+
+    const headers = {};
+    if (config.api_key) {
+      headers['x-cg-api-key'] = config.api_key;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error('Rate limit exceeded. Please try again later.');
+        }
+        throw new Error(`API returned ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data[fromId] || !data[fromId][toId]) {
+        throw new Error(`Rate not available for ${from}/${to}`);
+      }
+
+      return {
+        from,
+        to,
+        rate: data[fromId][toId],
+        timestamp: new Date(),
+        source: this.name,
+      };
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timed out after ${timeout}ms`);
+      }
+      throw new Error(`Failed to fetch rate: ${error.message}`);
+    }
+  },
+
+  async getRateAtDate(from, to, date) {
+    const config = this.config || {};
+    const timeout = config.timeout || 15000;
+    const vsCurrency = (config.vs_currency || 'usd').toLowerCase();
+
+    const fromId = this.id_mapping[from];
+    const toId = this.id_mapping[to];
+
+    if (!fromId || !toId) {
+      throw new Error(`Unsupported currency pair: ${from}/${to}`);
+    }
+
+    const dateStr = date.toISOString().split('T')[0];
+    const url = `https://api.coingecko.com/api/v3/coins/${fromId}/history?date=${dateStr}&localization=false`;
+
+    const headers = {};
+    if (config.api_key) {
+      headers['x-cg-api-key'] = config.api_key;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error('Rate limit exceeded. Please try again later.');
+        }
+        throw new Error(`API returned ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      if (!data.market_data || !data.market_data.current_price) {
+        throw new Error(`Historical data not available for ${dateStr}`);
+      }
+
+      const rate = data.market_data.current_price[vsCurrency];
+      if (!rate) {
+        throw new Error(`Rate not available for ${from}/${to} on ${dateStr}`);
+      }
+
+      // Convert: if from is BTC and vsCurrency is USD, rate is BTC/USD
+      // If we need from/to rate, we need to handle inverse
+      let finalRate;
+      if (fromId === from.toLowerCase() && toId === vsCurrency) {
+        finalRate = rate;
+      } else {
+        // Need to get toId price and calculate inverse
+        const toUrl = `https://api.coingecko.com/api/v3/coins/${toId}/history?date=${dateStr}&localization=false`;
+        const toResponse = await fetch(toUrl, { headers });
+        const toData = await toResponse.json();
+        const toRate = toData.market_data?.current_price?.[vsCurrency];
+        if (toRate) {
+          finalRate = rate / toRate;
+        } else {
+          throw new Error(`Cannot calculate ${from}/${to} rate`);
+        }
+      }
+
+      return {
+        from,
+        to,
+        rate: finalRate,
+        timestamp: date,
+        source: this.name,
+      };
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timed out after ${timeout}ms`);
+      }
+      throw new Error(`Failed to fetch historical rate: ${error.message}`);
+    }
+  },
+
   async testConnection() {
     const result = await this.fetchRates(['BTC', 'ETH'], 'USD');
     return {
