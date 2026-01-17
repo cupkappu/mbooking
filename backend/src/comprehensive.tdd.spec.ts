@@ -797,6 +797,7 @@ describe('RateEngine', () => {
     it('should return null when no provider available', async () => {
       rateRepository.findOne.mockResolvedValue(null);
       providerRepository.findOne.mockResolvedValue(null);
+      providerRepository.find.mockResolvedValue([]);
 
       const result = await service.getRate('USD', 'HKD');
 

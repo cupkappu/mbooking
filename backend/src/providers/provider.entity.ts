@@ -34,6 +34,18 @@ export class Provider {
   @Column({ default: true })
   is_active: boolean;
 
+  @Column({ default: true })
+  record_history: boolean;
+
+  @Column({ type: 'jsonb', nullable: true })
+  supported_currencies: string[];
+
+  @Column({ default: false })
+  supports_historical: boolean;
+
+  @Column({ default: false })
+  supports_date_query: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 

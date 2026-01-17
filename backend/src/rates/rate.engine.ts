@@ -1,10 +1,17 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import axios from 'axios';
 import { ExchangeRate } from './exchange-rate.entity';
-import { Provider, ProviderType } from './provider.entity';
+import { Provider, ProviderType } from '../providers/provider.entity';
+
+// Valid ISO 4217 currency codes (common ones)
+const VALID_CURRENCY_CODES = new Set([
+  'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'HKD', 'AUD', 'CAD', 'CHF',
+  'NZD', 'SGD', 'KRW', 'INR', 'BRL', 'MXN', 'ZAR', 'THB',
+  'BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE',
+]);
 
 interface RateResult {
   from: string;
@@ -12,6 +19,13 @@ interface RateResult {
   rate: number;
   timestamp: Date;
   source: string;
+}
+
+interface AverageRateResult {
+  average_rate: number;
+  min_rate: number;
+  max_rate: number;
+  sample_count: number;
 }
 
 @Injectable()
@@ -26,55 +40,167 @@ export class RateEngine {
     private providerRepository: Repository<Provider>,
   ) {}
 
+  private validateCurrencyCode(currency: string): void {
+    if (!VALID_CURRENCY_CODES.has(currency.toUpperCase())) {
+      throw new BadRequestException(`Invalid currency code: ${currency}`);
+    }
+  }
+
   async getRate(from: string, to: string, options: {
     date?: Date;
     providerId?: string;
   } = {}): Promise<RateResult | null> {
-    if (from === to) {
-      return { from, to, rate: 1, timestamp: new Date(), source: 'identity' };
+    const fromUpper = from.toUpperCase();
+    const toUpper = to.toUpperCase();
+
+    this.validateCurrencyCode(fromUpper);
+    this.validateCurrencyCode(toUpper);
+
+    if (fromUpper === toUpper) {
+      return { from: fromUpper, to: toUpper, rate: 1, timestamp: new Date(), source: 'identity' };
     }
 
     const date = options.date || new Date();
 
+    // Check database cache first
     const cachedRate = await this.rateRepository.findOne({
       where: {
-        from_currency: from,
-        to_currency: to,
+        from_currency: fromUpper,
+        to_currency: toUpper,
         date: date,
       },
     });
 
     if (cachedRate) {
       return {
-        from,
-        to,
+        from: fromUpper,
+        to: toUpper,
         rate: Number(cachedRate.rate),
         timestamp: cachedRate.fetched_at,
         source: cachedRate.provider_id,
       };
     }
 
-    const provider = options.providerId
-      ? await this.providerRepository.findOne({ where: { id: options.providerId } })
-      : await this.providerRepository.findOne({ where: { is_active: true } });
+    // Try to get a provider - if no specific provider is set, try all active providers
+    let providers: Provider[];
+    
+    if (options.providerId) {
+      const provider = await this.providerRepository.findOne({ 
+        where: { id: options.providerId } 
+      });
+      providers = provider ? [provider] : [];
+    } else {
+      providers = await this.providerRepository.find({
+        where: { is_active: true },
+        order: { created_at: 'ASC' },
+      });
+    }
 
-    if (!provider) {
+    if (!providers.length) {
       return null;
     }
 
-    let rate: RateResult | null = null;
+    // Try each provider in order until one succeeds
+    for (const provider of providers) {
+      if (!provider) continue;
 
-    if (provider.type === ProviderType.REST_API) {
-      rate = await this.fetchFromRestApi(provider, from, to, date);
-    } else if (provider.type === ProviderType.JS_PLUGIN) {
-      rate = await this.executeJsPlugin(provider, from, to, date);
+      const rate = await this.fetchFromProvider(provider, fromUpper, toUpper, date);
+
+      if (rate) {
+        if (provider.record_history) {
+          await this.saveRate(rate, provider.id, date);
+        }
+        return rate;
+      }
     }
 
-    if (rate && provider.record_history) {
-      await this.saveRate(rate, provider.id, date);
+    // Try manual rate as last resort
+    const manualRate = await this.rateRepository.findOne({
+      where: {
+        from_currency: fromUpper,
+        to_currency: toUpper,
+        date,
+      },
+      order: { fetched_at: 'DESC' },
+    });
+
+    if (manualRate && manualRate.provider_id === 'manual') {
+      return {
+        from: fromUpper,
+        to: toUpper,
+        rate: Number(manualRate.rate),
+        timestamp: manualRate.fetched_at,
+        source: 'manual',
+      };
     }
 
-    return rate;
+    return null;
+  }
+
+  private async fetchFromProvider(
+    provider: Provider,
+    from: string,
+    to: string,
+    date: Date,
+  ): Promise<RateResult | null> {
+    try {
+      if (provider.provider_type === ProviderType.REST_API) {
+        return await this.fetchFromRestApi(provider, from, to, date);
+      } else if (provider.provider_type === ProviderType.JS_PLUGIN) {
+        return await this.executeJsPlugin(provider, from, to, date);
+      }
+      return null;
+    } catch (error) {
+      this.logger.warn(`Provider ${provider.name} failed: ${error.message}`);
+      return null;
+    }
+  }
+
+  async getAverageRate(
+    from: string,
+    to: string,
+    options: {
+      fromDate: Date;
+      toDate: Date;
+    },
+  ): Promise<AverageRateResult> {
+    const fromUpper = from.toUpperCase();
+    const toUpper = to.toUpperCase();
+
+    this.validateCurrencyCode(fromUpper);
+    this.validateCurrencyCode(toUpper);
+
+    const { fromDate, toDate } = options;
+
+    const rates = await this.rateRepository
+      .createQueryBuilder('rate')
+      .where('rate.from_currency = :from', { from: fromUpper })
+      .andWhere('rate.to_currency = :to', { to: toUpper })
+      .andWhere('rate.date >= :fromDate', { fromDate })
+      .andWhere('rate.date <= :toDate', { toDate })
+      .orderBy('rate.date', 'ASC')
+      .getMany();
+
+    if (rates.length === 0) {
+      return {
+        average_rate: 0,
+        min_rate: 0,
+        max_rate: 0,
+        sample_count: 0,
+      };
+    }
+
+    const rateValues = rates.map(r => Number(r.rate));
+    const minRate = Math.min(...rateValues);
+    const maxRate = Math.max(...rateValues);
+    const avgRate = rateValues.reduce((a, b) => a + b, 0) / rateValues.length;
+
+    return {
+      average_rate: parseFloat(avgRate.toFixed(8)),
+      min_rate: parseFloat(minRate.toFixed(8)),
+      max_rate: parseFloat(maxRate.toFixed(8)),
+      sample_count: rates.length,
+    };
   }
 
   async convert(amount: number, from: string, to: string, date?: Date): Promise<{
