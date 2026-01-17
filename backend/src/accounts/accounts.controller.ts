@@ -47,6 +47,16 @@ export class AccountsController {
     return { success: true };
   }
 
+  @Post(':id/move')
+  @ApiOperation({ summary: 'Move account to new parent' })
+  async moveAccount(
+    @Param('id') id: string,
+    @Body() body: { new_parent_id: string | null },
+    @Request() req,
+  ) {
+    return this.accountsService.moveAccount(id, body.new_parent_id, req.user.tenantId);
+  }
+
   @Get(':id/balance')
   @ApiOperation({ summary: 'Get account balance' })
   async getBalance(@Param('id') id: string, @Request() req) {

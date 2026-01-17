@@ -165,6 +165,119 @@ export class RateEngine {
     }
   }
 
+  async getRateHistory(
+    from: string,
+    to: string,
+    options: {
+      fromDate?: Date;
+      toDate?: Date;
+      limit?: number;
+    } = {},
+  ): Promise<{
+    rates: Array<{
+      from: string;
+      to: string;
+      rate: number;
+      date: Date;
+      fetched_at: Date;
+      provider_id: string;
+    }>;
+    total: number;
+  }> {
+    const { fromDate, toDate, limit = 100 } = options;
+
+    const query = this.rateRepository
+      .createQueryBuilder('rate')
+      .where('rate.from_currency = :from', { from })
+      .andWhere('rate.to_currency = :to', { to });
+
+    if (fromDate) {
+      query.andWhere('rate.date >= :fromDate', { fromDate });
+    }
+
+    if (toDate) {
+      query.andWhere('rate.date <= :toDate', { toDate });
+    }
+
+    query.orderBy('rate.date', 'DESC');
+    query.take(limit);
+
+    const rates = await query.getMany();
+
+    return {
+      rates: rates.map(r => ({
+        from: r.from_currency,
+        to: r.to_currency,
+        rate: Number(r.rate),
+        date: r.date,
+        fetched_at: r.fetched_at,
+        provider_id: r.provider_id,
+      })),
+      total: rates.length,
+    };
+  }
+
+  async getRateTrend(
+    from: string,
+    to: string,
+    days: number = 30,
+  ): Promise<{
+    min_rate: number;
+    max_rate: number;
+    avg_rate: number;
+    trend: 'up' | 'down' | 'stable';
+    change_percent: number;
+    history: Array<{ date: string; rate: number }>;
+  }> {
+    const toDate = new Date();
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - days);
+
+    const { rates } = await this.getRateHistory(from, to, {
+      fromDate,
+      toDate,
+      limit: days,
+    });
+
+    if (rates.length === 0) {
+      return {
+        min_rate: 0,
+        max_rate: 0,
+        avg_rate: 0,
+        trend: 'stable',
+        change_percent: 0,
+        history: [],
+      };
+    }
+
+    const rateValues = rates.map(r => r.rate);
+    const minRate = Math.min(...rateValues);
+    const maxRate = Math.max(...rateValues);
+    const avgRate = rateValues.reduce((a, b) => a + b, 0) / rateValues.length;
+
+    const sortedRates = rates.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const firstRate = sortedRates[0]?.rate || 0;
+    const lastRate = sortedRates[sortedRates.length - 1]?.rate || 0;
+    const changePercent = firstRate !== 0 ? ((lastRate - firstRate) / firstRate) * 100 : 0;
+
+    let trend: 'up' | 'down' | 'stable';
+    if (changePercent > 1) trend = 'up';
+    else if (changePercent < -1) trend = 'down';
+    else trend = 'stable';
+
+    return {
+      min_rate: parseFloat(minRate.toFixed(8)),
+      max_rate: parseFloat(maxRate.toFixed(8)),
+      avg_rate: parseFloat(avgRate.toFixed(8)),
+      trend,
+      change_percent: parseFloat(changePercent.toFixed(2)),
+      history: rates.map(r => ({
+        date: r.date.toISOString().split('T')[0],
+        rate: Number(r.rate),
+      })),
+    };
+  }
+
   private async saveRate(rate: RateResult, providerId: string, date: Date): Promise<void> {
     const existing = await this.rateRepository.findOne({
       where: {

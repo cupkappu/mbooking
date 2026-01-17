@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, DeleteDateColumn } from 'typeorm';
 
 export enum BudgetType {
   PERIODIC = 'periodic',
@@ -20,7 +20,7 @@ export class Budget {
   tenant_id: string;
 
   @Column({ nullable: true })
-  account_id: string;
+  account_id: string | null;
 
   @Column()
   name: string;
@@ -41,14 +41,14 @@ export class Budget {
   start_date: Date;
 
   @Column({ type: 'date', nullable: true })
-  end_date: Date;
+  end_date: Date | null;
 
   @Column({
     type: 'enum',
     enum: PeriodType,
     nullable: true,
   })
-  period_type: PeriodType;
+  period_type: PeriodType | null;
 
   @Column({ type: 'decimal', precision: 20, scale: 4, default: 0 })
   spent_amount: number;
@@ -67,4 +67,7 @@ export class Budget {
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  @DeleteDateColumn()
+  deleted_at: Date | null;
 }

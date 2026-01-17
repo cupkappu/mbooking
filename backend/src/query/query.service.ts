@@ -257,6 +257,7 @@ export class QueryService {
           is_active: true,
           created_at: group[0].account.created_at,
           updated_at: group[0].account.updated_at,
+          deleted_at: null,
         },
         currencies: mergedCurrencies,
       };

@@ -14,6 +14,7 @@ import { SchedulerModule } from './scheduler/scheduler.module';
 import { BudgetsModule } from './budgets/budgets.module';
 import { ReportsModule } from './reports/reports.module';
 import { CurrenciesModule } from './currencies/currencies.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { CurrenciesModule } from './currencies/currencies.module';
     BudgetsModule,
     ReportsModule,
     CurrenciesModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

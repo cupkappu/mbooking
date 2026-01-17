@@ -17,9 +17,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Create non-root user for security
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Create non-root user with unique UID (avoid conflicts)
+# Use high UID to avoid conflicts with host users
+RUN addgroup --system --gid 99999 appgroup && \
+    adduser --system --uid 99999 appuser
 
 # Copy standalone output
 COPY --from=builder /app/.next/standalone ./
@@ -27,10 +28,10 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
 # Change ownership
-RUN chown -R nextjs:nodejs /app
+RUN chown -R appuser:appgroup /app
 
 # Switch to non-root user
-USER nextjs
+USER appuser
 
 EXPOSE 3000
 

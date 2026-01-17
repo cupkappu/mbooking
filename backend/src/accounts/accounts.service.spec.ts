@@ -7,7 +7,7 @@ import { Account, AccountType } from './account.entity';
 
 describe('AccountsService', () => {
   let service: AccountsService;
-  let accountRepository: jest.Mocked<Repository<Account>>;
+  let accountRepository: any;
 
   const mockAccount: Account = {
     id: 'uuid-1',
@@ -22,6 +22,7 @@ describe('AccountsService', () => {
     is_active: true,
     created_at: new Date(),
     updated_at: new Date(),
+    deleted_at: null,
   };
 
   beforeEach(async () => {

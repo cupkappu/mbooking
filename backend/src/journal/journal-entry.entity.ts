@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, DeleteDateColumn, OneToMany } from 'typeorm';
 import { JournalLine } from './journal-line.entity';
 
 @Entity('journal_entries')
@@ -16,7 +16,7 @@ export class JournalEntry {
   description: string;
 
   @Column({ nullable: true })
-  reference_id: string;
+  reference_id: string | null;
 
   @Column({ default: false })
   is_pending: boolean;
@@ -32,4 +32,7 @@ export class JournalEntry {
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  @DeleteDateColumn()
+  deleted_at: Date | null;
 }

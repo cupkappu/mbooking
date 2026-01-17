@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, Tree, TreeChildren, TreeParent } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, DeleteDateColumn, ManyToOne, OneToMany, Tree, TreeChildren, TreeParent } from 'typeorm';
 
 export enum AccountType {
   ASSETS = 'assets',
@@ -18,7 +18,7 @@ export class Account {
   tenant_id: string;
 
   @TreeParent()
-  parent_id: string;
+  parent_id: string | null;
 
   @TreeChildren()
   children: Account[];
@@ -49,4 +49,7 @@ export class Account {
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  @DeleteDateColumn()
+  deleted_at: Date | null;
 }

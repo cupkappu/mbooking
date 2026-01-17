@@ -38,6 +38,7 @@ describe('AuthService', () => {
     tenant: null as any,
     created_at: new Date(),
     updated_at: new Date(),
+    role: 'user',
   };
 
   beforeEach(async () => {
@@ -180,6 +181,7 @@ describe('AccountsService', () => {
     is_active: true,
     created_at: new Date(),
     updated_at: new Date(),
+    deleted_at: null,
   };
 
   beforeEach(async () => {
@@ -324,6 +326,7 @@ describe('JournalService', () => {
     lines: [],
     created_at: new Date(),
     updated_at: new Date(),
+    deleted_at: null,
   };
 
   beforeEach(async () => {
@@ -465,6 +468,7 @@ describe('BudgetsService', () => {
     is_active: true,
     created_at: new Date(),
     updated_at: new Date(),
+    deleted_at: null,
   };
 
   beforeEach(async () => {
@@ -575,6 +579,7 @@ describe('QueryService', () => {
     is_active: true,
     created_at: new Date(),
     updated_at: new Date(),
+    deleted_at: null,
   };
 
   beforeEach(async () => {
@@ -672,7 +677,7 @@ describe('QueryService', () => {
 
   describe('getJournalEntries', () => {
     it('should return paginated journal entries', async () => {
-      const mockEntries: JournalEntry[] = [{
+       const mockEntries: JournalEntry[] = [{
         id: '1',
         tenant_id: 'tenant-1',
         date: new Date(),
@@ -683,6 +688,7 @@ describe('QueryService', () => {
         lines: [],
         created_at: new Date(),
         updated_at: new Date(),
+        deleted_at: null,
       }];
       journalEntryRepository.findAndCount.mockResolvedValue([mockEntries, 1]);
 

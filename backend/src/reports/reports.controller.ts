@@ -41,4 +41,42 @@ export class ReportsController {
       currency,
     });
   }
+
+  @Get('cash-flow')
+  @ApiOperation({ summary: 'Generate cash flow statement' })
+  async getCashFlowStatement(
+    @Request() req,
+    @Query('from_date') fromDate?: string,
+    @Query('to_date') toDate?: string,
+    @Query('depth') depth?: number,
+    @Query('currency') currency?: string,
+  ) {
+    return this.reportsService.getCashFlowStatement(req.user.tenantId, {
+      fromDate: fromDate ? new Date(fromDate) : undefined,
+      toDate: toDate ? new Date(toDate) : undefined,
+      depth: depth ? Number(depth) : undefined,
+      currency,
+    });
+  }
+
+  @Get('income-statement/compare')
+  @ApiOperation({ summary: 'Generate income statement period comparison' })
+  async getIncomeStatementComparison(
+    @Request() req,
+    @Query('current_from_date') currentFromDate?: string,
+    @Query('current_to_date') currentToDate?: string,
+    @Query('prior_from_date') priorFromDate?: string,
+    @Query('prior_to_date') priorToDate?: string,
+    @Query('depth') depth?: number,
+    @Query('currency') currency?: string,
+  ) {
+    return this.reportsService.getIncomeStatementComparison(req.user.tenantId, {
+      currentFromDate: currentFromDate ? new Date(currentFromDate) : undefined,
+      currentToDate: currentToDate ? new Date(currentToDate) : undefined,
+      priorFromDate: priorFromDate ? new Date(priorFromDate) : undefined,
+      priorToDate: priorToDate ? new Date(priorToDate) : undefined,
+      depth: depth ? Number(depth) : undefined,
+      currency,
+    });
+  }
 }

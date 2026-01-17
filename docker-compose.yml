@@ -36,7 +36,7 @@ services:
       NODE_ENV: production
       PORT: 3001
     ports:
-      - "3002:3001"
+      - "8067:3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,6 +45,14 @@ services:
     restart: unless-stopped
     networks:
       - accounting-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   frontend:
     build:
@@ -54,12 +62,20 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://backend:3001
     ports:
-      - "3001:3000"
+      - "8068:3000"
     depends_on:
       - backend
     restart: unless-stopped
     networks:
       - accounting-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
   # 可选: Authelia
   # authelia:

@@ -19,6 +19,36 @@ export class RatesController {
     return this.ratesService.getLatestRate(from, to);
   }
 
+  @Get('history')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get exchange rate history' })
+  async getRateHistory(
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('from_date') fromDate?: string,
+    @Query('to_date') toDate?: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.ratesService.getRateHistory(from, to, {
+      fromDate: fromDate ? new Date(fromDate) : undefined,
+      toDate: toDate ? new Date(toDate) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get('trend')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get exchange rate trend' })
+  async getRateTrend(
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('days') days?: number,
+  ) {
+    return this.ratesService.getRateTrend(from, to, days ? Number(days) : 30);
+  }
+
   @Get('convert')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

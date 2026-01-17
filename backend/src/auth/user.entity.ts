@@ -10,29 +10,32 @@ export class User {
   email: string;
 
   @Column({ nullable: true })
-  password: string;
+  password: string | null;
 
   @Column({ nullable: true })
-  name: string;
+  name: string | null;
 
   @Column({ nullable: true })
-  image: string;
+  image: string | null;
+
+  @Column({ nullable: true, default: 'credentials' })
+  provider: string | null;
 
   @Column({ nullable: true })
-  provider: string;
-
-  @Column({ nullable: true })
-  provider_id: string;
+  provider_id: string | null;
 
   @Column({ default: true })
   is_active: boolean;
+
+  @Column({ default: 'user' })
+  role: string;
 
   @OneToOne(() => Tenant)
   @JoinColumn()
   tenant: Tenant;
 
   @Column({ nullable: true })
-  tenant_id: string;
+  tenant_id: string | null;
 
   @CreateDateColumn()
   created_at: Date;

@@ -77,6 +77,57 @@ export class AccountsService {
     await this.accountRepository.remove(account);
   }
 
+  async moveAccount(
+    id: string,
+    newParentId: string | null,
+    tenantId: string,
+  ): Promise<Account> {
+    const account = await this.findById(id, tenantId);
+
+    if (newParentId === id) {
+      throw new BadRequestException('Cannot move account to itself');
+    }
+
+    let newParent: Account | null = null;
+    if (newParentId) {
+      newParent = await this.findById(newParentId, tenantId);
+
+      const descendants = await this.accountRepository.findDescendants(account);
+      const descendantIds = descendants.map(d => d.id);
+      if (descendantIds.includes(newParentId)) {
+        throw new BadRequestException('Cannot move account under its own descendant');
+      }
+    }
+
+    const oldPath = account.path;
+
+    if (newParent) {
+      account.path = `${newParent.path}:${account.name}`;
+      account.depth = newParent.depth + 1;
+      account.parent_id = newParentId;
+    } else {
+      account.path = account.name;
+      account.depth = 0;
+      account.parent_id = null as any;
+    }
+
+    await this.accountRepository.save(account);
+
+    if (oldPath !== account.path) {
+      const descendants = await this.accountRepository.findDescendants(account);
+      for (const descendant of descendants) {
+        if (descendant.id !== account.id) {
+          const relativePath = descendant.path.substring(oldPath.length + 1);
+          descendant.path = `${account.path}:${relativePath}`;
+          descendant.depth = descendant.path.split(':').length - 1;
+        }
+      }
+      await this.accountRepository.save(descendants);
+    }
+
+    return this.findById(id, tenantId);
+  }
+
   async getBalance(accountId: string, tenantId: string): Promise<any[]> {
     // TODO: Implement balance calculation with journal entries
     return [];

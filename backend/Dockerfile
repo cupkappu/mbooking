@@ -15,10 +15,12 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV JSON_LOGS=true
 
-# Create non-root user for security
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nestjs
+# Create non-root user with unique UID (avoid conflicts)
+# Use high UID to avoid conflicts with host users
+RUN addgroup --system --gid 99999 appgroup && \
+    adduser --system --uid 99999 appuser
 
 # Copy necessary files
 COPY --from=builder /app/dist ./dist
@@ -29,10 +31,10 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/plugins ./plugins
 
 # Change ownership
-RUN chown -R nestjs:nodejs /app
+RUN chown -R appuser:appgroup /app
 
 # Switch to non-root user
-USER nestjs
+USER appuser
 
 EXPOSE 3001
 

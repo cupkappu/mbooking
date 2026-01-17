@@ -26,6 +26,7 @@ describe('AuthService', () => {
     tenant: null as any,
     created_at: new Date(),
     updated_at: new Date(),
+    role: 'user',
   };
 
   beforeEach(async () => {

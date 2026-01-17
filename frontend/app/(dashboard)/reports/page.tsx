@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,7 +9,7 @@ import { apiClient } from '@/lib/api';
 import { RefreshCw, FileText, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 
 export default function ReportsPage() {
-  const [activeTab, setActiveTab] = useState<'balance-sheet' | 'income-statement'>('balance-sheet');
+  const [activeTab, setActiveTab] = useState<'balance-sheet' | 'income-statement' | 'cash-flow'>('balance-sheet');
   const [dateRange, setDateRange] = useState({
     from: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0],
     to: new Date().toISOString().split('T')[0],
