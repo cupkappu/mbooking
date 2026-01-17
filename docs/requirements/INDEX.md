@@ -16,6 +16,8 @@
 | `REQUIREMENTS_BUDGETS.md` | Budgets | Budget creation, tracking, alerts |
 | `REQUIREMENTS_PLUGIN_SYSTEM.md` | Plugins | Rate provider extensibility |
 | `REQUIREMENTS_ADMIN.md` | Admin | User management, system config, audit |
+| `REQUIREMENTS_LANDING_PAGE.md` | Landing Page | Public marketing landing page |
+| `REQUIREMENTS_AUTH_UI.md` | Auth UI | Sign In/Sign Out, role-based admin access |
 | `REQUIREMENTS_API.md` | API | REST endpoint specifications |
 | `REQUIREMENTS_DATABASE.md` | Database | Entity definitions, RLS, schema |
 
@@ -59,10 +61,21 @@ PRD.md (Master)
     │       ├── REQUIREMENTS_MULTI_CURRENCY.md (rate system)
     │       └── REQUIREMENTS_DATABASE.md (providers table)
     │
-    └── REQUIREMENTS_ADMIN.md
-            │
-            ├── REQUIREMENTS_API.md (admin endpoints)
-            └── REQUIREMENTS_DATABASE.md (audit logs)
+    ├── REQUIREMENTS_ADMIN.md
+    │       │
+    │       ├── REQUIREMENTS_API.md (admin endpoints)
+    │       └── REQUIREMENTS_DATABASE.md (audit logs)
+    │
+    ├── REQUIREMENTS_LANDING_PAGE.md
+    │       │
+    │       └── REQUIREMENTS_AUTH_UI.md (Sign In button links to auth)
+    │
+    ├── REQUIREMENTS_AUTH_UI.md
+    │       │
+    │       ├── REQUIREMENTS_ADMIN.md (role-based admin access)
+    │       └── REQUIREMENTS_API.md (auth endpoints)
+    │
+    └── REQUIREMENTS_DATABASE.md
 
 REQUIREMENTS_API.md (API)
     │
@@ -72,7 +85,8 @@ REQUIREMENTS_API.md (API)
     ├── REQUIREMENTS_REPORTS.md (report endpoints)
     ├── REQUIREMENTS_BUDGETS.md (budget endpoints)
     ├── REQUIREMENTS_PLUGIN_SYSTEM.md (provider endpoints)
-    └── REQUIREMENTS_ADMIN.md (admin endpoints)
+    ├── REQUIREMENTS_ADMIN.md (admin endpoints)
+    └── REQUIREMENTS_AUTH_UI.md (auth session)
 
 REQUIREMENTS_DATABASE.md (Database)
     │
@@ -122,18 +136,16 @@ REQUIREMENTS_DATABASE.md (Database)
 2. Check `REQUIREMENTS_API.md#admin-api-endpoints`
 3. Review audit logging in `REQUIREMENTS_DATABASE.md#audit-logs`
 
----
+### Frontend Landing Page
+1. Read `REQUIREMENTS_LANDING_PAGE.md`
+2. Check `REQUIREMENTS_AUTH_UI.md` for Sign In button
+3. Review component structure in `frontend/AGENTS.md`
 
-## Cross-Reference Syntax
-
-In each requirements file, use this pattern:
-
-```markdown
-**See also:**
-- [Core Features](../REQUIREMENTS_CORE.md#account-types)
-- [API Specs](../REQUIREMENTS_API.md#journal-endpoints)
-- [Database](../REQUIREMENTS_DATABASE.md#journal-entries)
-```
+### Authentication UI (Sign In/Sign Out)
+1. Read `REQUIREMENTS_AUTH_UI.md`
+2. Check session extension in `frontend/lib/auth-options.ts`
+3. Review user menu in `frontend/components/layout/user-menu.tsx`
+4. Check role protection in `frontend/middleware.ts`
 
 ---
 

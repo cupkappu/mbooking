@@ -52,6 +52,7 @@ interface BulkUserAction {
 
 **See also:**
 - [API - Admin user endpoints](../REQUIREMENTS_API.md#admin-user-endpoints)
+- [Frontend UI - Role-based Admin Access](../REQUIREMENTS_FRONTEND_UI.md#3-role-based-admin-access)
 
 ---
 

@@ -15,6 +15,7 @@ import { BudgetsModule } from './budgets/budgets.module';
 import { ReportsModule } from './reports/reports.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AdminModule } from './admin/admin.module';
+import { SeedsModule } from './common/seeds/seeds.module';
 
 @Module({
   imports: [
@@ -30,7 +31,7 @@ import { AdminModule } from './admin/admin.module';
       password: process.env.DATABASE_PASSWORD || 'secret',
       database: process.env.DATABASE_NAME || 'accounting',
       autoLoadEntities: true,
-      synchronize: process.env.NODE_ENV !== 'production',
+      synchronize: true,
       logging: process.env.NODE_ENV === 'development',
     }),
     ScheduleModule.forRoot(),
@@ -46,6 +47,7 @@ import { AdminModule } from './admin/admin.module';
     ReportsModule,
     CurrenciesModule,
     AdminModule,
+    SeedsModule,
   ],
 })
 export class AppModule {}

@@ -1,8 +1,5 @@
 import '@testing-library/jest-dom';
 
-// Mock global.fetch
-global.fetch = jest.fn();
-
 // Mock next-auth
 jest.mock('next-auth/react', () => ({
   useSession: jest.fn(() => ({ data: null, status: 'loading' })),
@@ -14,15 +11,6 @@ jest.mock('next-auth/react', () => ({
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(() => ({ push: jest.fn() })),
   usePathname: jest.fn(() => '/'),
-}));
-
-jest.mock('@/lib/api', () => ({
-  apiClient: {
-    get: jest.fn(),
-    post: jest.fn(),
-    put: jest.fn(),
-    delete: jest.fn(),
-  },
 }));
 
 jest.mock('@tanstack/react-query', () => ({

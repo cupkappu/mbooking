@@ -33,7 +33,7 @@ services:
       DATABASE_NAME: ${DB_NAME:-accounting}
       JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-key-min-32-chars-long}
       AUTH_SECRET: ${AUTH_SECRET:-your-auth-secret}
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: 3001
     ports:
       - "8067:3001"
@@ -61,6 +61,8 @@ services:
     container_name: accounting-frontend
     environment:
       NEXT_PUBLIC_API_URL: http://backend:3001
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-your-nextauth-secret-change-in-production}
+      NEXTAUTH_URL: http://localhost:8068
     ports:
       - "8068:3000"
     depends_on:

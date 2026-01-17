@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Account } from '../accounts/account.entity';
 import { JournalLine } from '../journal/journal-line.entity';
+import { JournalEntry } from '../journal/journal-entry.entity';
 import { ReportStorage, ReportType } from './entities/report-storage.entity';
 import { ReportsService } from './reports.service';
 import { ReportCacheService } from './report-cache.service';
@@ -12,7 +13,7 @@ import { IncomeStatementComparisonGenerator } from './income-statement-compariso
 import { CashFlowStatementGenerator } from './cash-flow.generator';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Account, JournalLine, ReportStorage])],
+  imports: [TypeOrmModule.forFeature([Account, JournalLine, JournalEntry, ReportStorage])],
   controllers: [ReportsController],
   providers: [ReportsService, ReportCacheService, BalanceSheetGenerator, IncomeStatementGenerator, IncomeStatementComparisonGenerator, CashFlowStatementGenerator],
   exports: [ReportsService, ReportCacheService],

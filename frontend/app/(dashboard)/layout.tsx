@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { QueryProvider } from '@/providers/query-provider';
 import { SessionProvider } from '@/providers/session-provider';
+import { UserMenu } from '@/components/layout/user-menu';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard' },
@@ -27,7 +28,9 @@ export default function DashboardLayout({
         <div className="min-h-screen flex">
           <aside className="w-64 border-r bg-card">
             <div className="p-6">
-              <h1 className="text-xl font-bold">Accounting</h1>
+              <Link href="/dashboard">
+                <h1 className="text-xl font-bold">Accounting</h1>
+              </Link>
             </div>
             <nav className="px-4 space-y-1">
               {navigation.map((item) => {
@@ -50,7 +53,12 @@ export default function DashboardLayout({
             </nav>
           </aside>
 
-          <main className="flex-1 p-8">{children}</main>
+          <div className="flex-1 flex flex-col">
+            <header className="h-16 border-b flex items-center justify-end px-8 gap-4">
+              <UserMenu />
+            </header>
+            <main className="flex-1 p-8">{children}</main>
+          </div>
         </div>
       </QueryProvider>
     </SessionProvider>
