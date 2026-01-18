@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import AccountsPage from './page';
 import { useAccounts, useCreateAccount, useBalances } from '@/hooks/use-api';
 import { currenciesApi } from '@/lib/currencies';
@@ -95,50 +95,64 @@ describe('AccountsPage', () => {
   });
 
   describe('Rendering', () => {
-    it('should render accounts page with account tree', () => {
-      render(<AccountsPage />);
+    it('should render accounts page with account tree', async () => {
+      await act(async () => {
+        render(<AccountsPage />);
+      });
 
       const accountsTitle = screen.getByText('Accounts');
       expect(accountsTitle).toBeTruthy();
     });
 
-    it('should show accounts in the tree', () => {
-      render(<AccountsPage />);
+    it('should show accounts in the tree', async () => {
+      await act(async () => {
+        render(<AccountsPage />);
+      });
 
       const assetsAccount = screen.getByText('Assets');
       expect(assetsAccount).toBeTruthy();
     });
 
-    it('should show subtree balance toggle switch', () => {
-      render(<AccountsPage />);
+    it('should show subtree balance toggle switch', async () => {
+      await act(async () => {
+        render(<AccountsPage />);
+      });
 
       const toggleLabel = screen.getByText('Show Subtree Balances');
       expect(toggleLabel).toBeTruthy();
     });
 
-    it('should display currency selector', () => {
-      render(<AccountsPage />);
+    it('should display currency selector', async () => {
+      await act(async () => {
+        render(<AccountsPage />);
+      });
 
       const currencyLabel = screen.getByText('Display Currency:');
       expect(currencyLabel).toBeTruthy();
     });
 
-    it('should show New Account button', () => {
-      render(<AccountsPage />);
+    it('should show New Account button', async () => {
+      await act(async () => {
+        render(<AccountsPage />);
+      });
 
       const newAccountButton = screen.getByText('New Account');
       expect(newAccountButton).toBeTruthy();
     });
 
-    it('should show Account Tree card', () => {
-      render(<AccountsPage />);
+    it('should show Account Tree card', async () => {
+      await act(async () => {
+        render(<AccountsPage />);
+      });
 
       const accountTreeCard = screen.getByText('Account Tree');
       expect(accountTreeCard).toBeTruthy();
     });
 
     it('should show currency options in selector', async () => {
-      render(<AccountsPage />);
+      await act(async () => {
+        render(<AccountsPage />);
+      });
 
       await waitFor(() => {
         const usdOption = screen.getByRole('option', { name: 'USD' });
@@ -150,14 +164,16 @@ describe('AccountsPage', () => {
   });
 
   describe('Loading States', () => {
-    it('should display loading state when accounts are loading', () => {
+    it('should display loading state when accounts are loading', async () => {
       (useAccounts as jest.Mock).mockReturnValue({
         data: null,
         isLoading: true,
         refetch: jest.fn(),
       });
 
-      render(<AccountsPage />);
+      await act(async () => {
+        render(<AccountsPage />);
+      });
 
       const loadingText = screen.getByText('Loading accounts...');
       expect(loadingText).toBeTruthy();
@@ -165,14 +181,16 @@ describe('AccountsPage', () => {
   });
 
   describe('Empty State', () => {
-    it('should show empty state when no accounts exist', () => {
+    it('should show empty state when no accounts exist', async () => {
       (useAccounts as jest.Mock).mockReturnValue({
         data: [],
         isLoading: false,
         refetch: jest.fn(),
       });
 
-      render(<AccountsPage />);
+      await act(async () => {
+        render(<AccountsPage />);
+      });
 
       const emptyMessage = screen.getByText('No accounts yet. Create your first account to get started.');
       expect(emptyMessage).toBeTruthy();
@@ -180,8 +198,10 @@ describe('AccountsPage', () => {
   });
 
   describe('Toggle Interaction', () => {
-    it('should toggle the subtree balance switch', () => {
-      render(<AccountsPage />);
+    it('should toggle the subtree balance switch', async () => {
+      await act(async () => {
+        render(<AccountsPage />);
+      });
 
       const toggle = screen.getByLabelText('Show Subtree Balances');
       expect(toggle).toBeTruthy();
@@ -195,8 +215,10 @@ describe('AccountsPage', () => {
   });
 
   describe('Currency Selection', () => {
-    it('should have currency options available', () => {
-      render(<AccountsPage />);
+    it('should have currency options available', async () => {
+      await act(async () => {
+        render(<AccountsPage />);
+      });
 
       const currencySelect = screen.getByRole('combobox');
       expect(currencySelect).toBeTruthy();
