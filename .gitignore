@@ -53,3 +53,6 @@ docs/bug
 
 # playwright test artifacts
 playwright-report/
+
+# Git worktrees
+.worktrees/
