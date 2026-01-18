@@ -148,6 +148,52 @@ describe('AccountsService', () => {
       expect(result.path).toBe('assets:bank');
       expect(result.depth).toBe(1);
     });
+
+    it('should throw BadRequestException when child account type does not match parent', async () => {
+      const parentAccount = { ...mockAccount, type: AccountType.ASSETS };
+      accountRepository.findOne.mockResolvedValue(parentAccount);
+
+      await expect(
+        service.create(
+          {
+            name: 'loan',
+            type: AccountType.LIABILITIES,
+            currency: 'USD',
+            parent_id: 'uuid-1',
+          } as any,
+          'tenant-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should allow creating child account with same type as parent', async () => {
+      const parentAccount = { ...mockAccount, path: 'assets', depth: 0, type: AccountType.ASSETS };
+      const childAccount = {
+        ...mockAccount,
+        parent: parentAccount as Account,
+        path: 'assets:savings',
+        depth: 1,
+        type: AccountType.ASSETS,
+      };
+
+      accountRepository.findOne.mockResolvedValue(parentAccount);
+      accountRepository.create.mockReturnValue(childAccount);
+      accountRepository.save.mockResolvedValue(childAccount);
+
+      const result = await service.create(
+        {
+          name: 'savings',
+          type: AccountType.ASSETS,
+          currency: 'USD',
+          parent_id: 'uuid-1',
+        } as any,
+        'tenant-1',
+      );
+
+      expect(result).toBeDefined();
+      expect(result.path).toBe('assets:savings');
+      expect(result.depth).toBe(1);
+    });
   });
 
   describe('update', () => {

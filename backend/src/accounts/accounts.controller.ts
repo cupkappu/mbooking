@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, UsePipes, ValidationPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AccountsService } from './accounts.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CreateAccountDto, UpdateAccountDto } from './dto/account.dto';
 
 @ApiTags('accounts')
 @Controller('accounts')
@@ -29,14 +30,16 @@ export class AccountsController {
   }
 
   @Post()
+  @UsePipes(new ValidationPipe({ transform: true }))
   @ApiOperation({ summary: 'Create account' })
-  async create(@Body() data: any, @Request() req) {
+  async create(@Body() data: CreateAccountDto, @Request() req) {
     return this.accountsService.create(data, req.user.tenantId);
   }
 
   @Put(':id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Update account' })
-  async update(@Param('id') id: string, @Body() data: any, @Request() req) {
+  async update(@Param('id') id: string, @Body() data: UpdateAccountDto, @Request() req) {
     return this.accountsService.update(id, data, req.user.tenantId);
   }
 
