@@ -64,6 +64,14 @@ export class AccountsService {
 
     if (parentId) {
       parent = await this.findById(parentId, tenantId);
+      
+      // Validate: child account type must match parent account type
+      if (parent.type !== data.type) {
+        throw new BadRequestException(
+          `Child account type "${data.type}" must match parent account type "${parent.type}"`
+        );
+      }
+      
       path = `${parent.path}:${data.name}`;
       depth = parent.depth + 1;
     }

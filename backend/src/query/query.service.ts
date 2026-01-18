@@ -276,12 +276,10 @@ export class QueryService {
   }
 
   private async calculateAccountBalance(accountId: string, dateRange?: { from: string; to: string }): Promise<CurrencyBalance[]> {
-    const accountIds = await this.getDescendantIds(accountId);
-
     const query = this.journalLineRepository
       .createQueryBuilder('line')
       .select(['line.currency', 'SUM(line.converted_amount) as total'])
-      .where('line.account_id IN (:...accountIds)', { accountIds })
+      .where('line.account_id = :accountId', { accountId })
       .groupBy('line.currency');
 
     if (dateRange) {
