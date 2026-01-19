@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { BudgetsService } from './budgets.service';
 import { Budget, BudgetType } from './budget.entity';
+import { TenantContext } from '../common/context/tenant.context';
 
 describe('BudgetsService', () => {
   let service: BudgetsService;
@@ -27,6 +28,13 @@ describe('BudgetsService', () => {
     created_at: new Date(),
     updated_at: new Date(),
     deleted_at: null,
+  };
+
+  const runWithTenant = <T>(tenantId: string, callback: () => T): T => {
+    return TenantContext.run(
+      { tenantId, userId: 'user-1', requestId: 'req-1' },
+      callback,
+    );
   };
 
   beforeEach(async () => {
@@ -54,7 +62,7 @@ describe('BudgetsService', () => {
       const mockBudgets = [mockBudget];
       budgetRepository.find.mockResolvedValue(mockBudgets);
 
-      const result = await service.findAll('tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.findAll());
 
       expect(result).toEqual(mockBudgets);
       expect(budgetRepository.find).toHaveBeenCalledWith({
@@ -68,7 +76,7 @@ describe('BudgetsService', () => {
     it('should return budget when found', async () => {
       budgetRepository.findOne.mockResolvedValue(mockBudget);
 
-      const result = await service.findById('uuid-1', 'tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.findById('uuid-1'));
 
       expect(result).toEqual(mockBudget);
     });
@@ -76,7 +84,8 @@ describe('BudgetsService', () => {
     it('should throw NotFoundException when not found', async () => {
       budgetRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('not-found', 'tenant-1')).rejects.toThrow(NotFoundException);
+      await expect(runWithTenant('tenant-1', () => service.findById('not-found')))
+        .rejects.toThrow(NotFoundException);
     });
   });
 
@@ -85,16 +94,15 @@ describe('BudgetsService', () => {
       budgetRepository.create.mockReturnValue(mockBudget);
       budgetRepository.save.mockResolvedValue(mockBudget);
 
-      const result = await service.create(
-        {
+      const result = await runWithTenant('tenant-1', () =>
+        service.create({
           name: 'Monthly Food Budget',
           type: BudgetType.PERIODIC,
           amount: 5000,
           currency: 'HKD',
           start_date: new Date('2025-01-01'),
           period_type: 'monthly' as any,
-        },
-        'tenant-1',
+        }),
       );
 
       expect(result).toBeDefined();
@@ -113,7 +121,7 @@ describe('BudgetsService', () => {
     it('should return progress calculation', async () => {
       budgetRepository.findOne.mockResolvedValue(mockBudget);
 
-      const result = await service.getProgress('uuid-1', 'tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.getProgress('uuid-1'));
 
       expect(result.progress).toBe(50);
       expect(result.remaining).toBe(2500);
@@ -125,7 +133,7 @@ describe('BudgetsService', () => {
       const highSpendingBudget = { ...mockBudget, spent_amount: 4500, alert_threshold: 0.8 };
       budgetRepository.findOne.mockResolvedValue(highSpendingBudget);
 
-      const result = await service.getProgress('uuid-1', 'tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.getProgress('uuid-1'));
 
       expect(result.progress).toBe(90);
       expect(result.is_alert).toBe(true);
@@ -135,7 +143,7 @@ describe('BudgetsService', () => {
       const exceededBudget = { ...mockBudget, spent_amount: 6000 };
       budgetRepository.findOne.mockResolvedValue(exceededBudget);
 
-      const result = await service.getProgress('uuid-1', 'tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.getProgress('uuid-1'));
 
       expect(result.progress).toBe(100);
       expect(result.is_exceeded).toBe(true);
@@ -148,7 +156,9 @@ describe('BudgetsService', () => {
       budgetRepository.findOne.mockResolvedValue(mockBudget);
       budgetRepository.save.mockResolvedValue(updatedBudget);
 
-      const result = await service.updateSpentAmount('uuid-1', 3000, 'HKD');
+      const result = await runWithTenant('tenant-1', () =>
+        service.updateSpentAmount('uuid-1', 3000, 'HKD'),
+      );
 
       expect(result.spent_amount).toBe(3000);
     });

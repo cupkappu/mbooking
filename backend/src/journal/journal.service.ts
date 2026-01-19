@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JournalEntry } from './journal-entry.entity';
 import { JournalLine } from './journal-line.entity';
+import { QueryService } from '../query/query.service';
+import { TenantContext } from '../common/context/tenant.context';
 
 @Injectable()
 export class JournalService {
@@ -11,9 +13,20 @@ export class JournalService {
     private journalEntryRepository: Repository<JournalEntry>,
     @InjectRepository(JournalLine)
     private journalLineRepository: Repository<JournalLine>,
+    @Inject(forwardRef(() => QueryService))
+    private queryService: QueryService,
   ) {}
 
-  async findAll(tenantId: string, options: any = {}): Promise<JournalEntry[]> {
+  private getTenantId(): string {
+    return TenantContext.requireTenantId();
+  }
+
+  private getUserId(): string {
+    return TenantContext.requireUserId();
+  }
+
+  async findAll(options: any = {}): Promise<JournalEntry[]> {
+    const tenantId = this.getTenantId();
     return this.journalEntryRepository.find({
       where: { tenant_id: tenantId },
       relations: ['lines'],
@@ -23,7 +36,8 @@ export class JournalService {
     });
   }
 
-  async findById(id: string, tenantId: string): Promise<JournalEntry> {
+  async findById(id: string): Promise<JournalEntry> {
+    const tenantId = this.getTenantId();
     const entry = await this.journalEntryRepository.findOne({
       where: { id, tenant_id: tenantId },
       relations: ['lines'],
@@ -47,7 +61,9 @@ export class JournalService {
       tags?: string[];
       remarks?: string;
     }>;
-  }, tenantId: string, userId: string): Promise<JournalEntry> {
+  }): Promise<JournalEntry> {
+    const tenantId = this.getTenantId();
+    const userId = this.getUserId();
     this.validateBalancedLines(data.lines);
 
     const entry = this.journalEntryRepository.create({
@@ -71,6 +87,8 @@ export class JournalService {
     await this.journalLineRepository.save(lines);
     savedEntry.lines = lines;
 
+    this.queryService.invalidateCache('balances:*');
+
     return savedEntry;
   }
 
@@ -89,8 +107,10 @@ export class JournalService {
     }
   }
 
-  async update(id: string, data: any, tenantId: string, userId: string): Promise<JournalEntry> {
-    const entry = await this.findById(id, tenantId);
+  async update(id: string, data: any): Promise<JournalEntry> {
+    const tenantId = this.getTenantId();
+    const userId = this.getUserId();
+    const entry = await this.findById(id);
 
     if (data.lines) {
       this.validateBalancedLines(data.lines);
@@ -112,11 +132,17 @@ export class JournalService {
       updated_by: userId,
     });
 
-    return this.journalEntryRepository.save(entry);
+    const savedEntry = await this.journalEntryRepository.save(entry);
+
+    this.queryService.invalidateCache('balances:*');
+
+    return savedEntry;
   }
 
-  async delete(id: string, tenantId: string): Promise<void> {
-    const entry = await this.findById(id, tenantId);
-    await this.journalEntryRepository.remove(entry);
+  async delete(id: string): Promise<void> {
+    await this.findById(id);
+    await this.journalEntryRepository.delete(id);
+
+    this.queryService.invalidateCache('balances:*');
   }
 }

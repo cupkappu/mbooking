@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, MoreThanOrEqual, Between } from 'typeorm';
 import { Budget, BudgetType } from './budget.entity';
+import { TenantContext } from '../common/context/tenant.context';
 
 @Injectable()
 export class BudgetsService {
@@ -10,14 +11,20 @@ export class BudgetsService {
     private budgetRepository: Repository<Budget>,
   ) {}
 
-  async findAll(tenantId: string): Promise<Budget[]> {
+  private getTenantId(): string {
+    return TenantContext.requireTenantId();
+  }
+
+  async findAll(): Promise<Budget[]> {
+    const tenantId = this.getTenantId();
     return this.budgetRepository.find({
       where: { tenant_id: tenantId, is_active: true },
       order: { created_at: 'DESC' },
     });
   }
 
-  async findById(id: string, tenantId: string): Promise<Budget> {
+  async findById(id: string): Promise<Budget> {
+    const tenantId = this.getTenantId();
     const budget = await this.budgetRepository.findOne({
       where: { id, tenant_id: tenantId },
     });
@@ -27,7 +34,8 @@ export class BudgetsService {
     return budget;
   }
 
-  async create(data: Partial<Budget>, tenantId: string): Promise<Budget> {
+  async create(data: Partial<Budget>): Promise<Budget> {
+    const tenantId = this.getTenantId();
     const budget = this.budgetRepository.create({
       ...data,
       tenant_id: tenantId,
@@ -36,26 +44,26 @@ export class BudgetsService {
     return this.budgetRepository.save(budget);
   }
 
-  async update(id: string, data: Partial<Budget>, tenantId: string): Promise<Budget> {
-    const budget = await this.findById(id, tenantId);
+  async update(id: string, data: Partial<Budget>): Promise<Budget> {
+    const budget = await this.findById(id);
     Object.assign(budget, data);
     return this.budgetRepository.save(budget);
   }
 
-  async delete(id: string, tenantId: string): Promise<void> {
-    const budget = await this.findById(id, tenantId);
+  async delete(id: string): Promise<void> {
+    const budget = await this.findById(id);
     budget.is_active = false;
     await this.budgetRepository.save(budget);
   }
 
-  async getProgress(id: string, tenantId: string): Promise<{
+  async getProgress(id: string): Promise<{
     budget: Budget;
     progress: number;
     remaining: number;
     is_exceeded: boolean;
     is_alert: boolean;
   }> {
-    const budget = await this.findById(id, tenantId);
+    const budget = await this.findById(id);
     const progress = Number(budget.spent_amount) / Number(budget.amount);
     const remaining = Number(budget.amount) - Number(budget.spent_amount);
     const threshold = budget.alert_threshold || 0.8;
@@ -69,7 +77,8 @@ export class BudgetsService {
     };
   }
 
-  async getActiveBudgets(tenantId: string, date: Date): Promise<Budget[]> {
+  async getActiveBudgets(date: Date): Promise<Budget[]> {
+    const tenantId = this.getTenantId();
     return this.budgetRepository.find({
       where: {
         tenant_id: tenantId,

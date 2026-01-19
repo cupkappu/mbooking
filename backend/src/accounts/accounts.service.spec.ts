@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AccountsService } from './accounts.service';
 import { Account, AccountType } from './account.entity';
+import { TenantContext } from '../common/context/tenant.context';
 
 describe('AccountsService', () => {
   let service: AccountsService;
@@ -23,6 +24,13 @@ describe('AccountsService', () => {
     created_at: new Date(),
     updated_at: new Date(),
     deleted_at: null,
+  };
+
+  const runWithTenant = <T>(tenantId: string, callback: () => T): T => {
+    return TenantContext.run(
+      { tenantId, userId: 'user-1', requestId: 'req-1' },
+      callback,
+    );
   };
 
   beforeEach(async () => {
@@ -63,7 +71,7 @@ describe('AccountsService', () => {
       const mockAccounts = [mockAccount];
       accountRepository.find.mockResolvedValue(mockAccounts);
 
-      const result = await service.findAll('tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.findAll());
 
       expect(result).toEqual(mockAccounts);
       expect(accountRepository.find).toHaveBeenCalledWith({
@@ -75,7 +83,7 @@ describe('AccountsService', () => {
     it('should return empty array when no accounts', async () => {
       accountRepository.find.mockResolvedValue([]);
 
-      const result = await service.findAll('tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.findAll());
 
       expect(result).toEqual([]);
     });
@@ -85,7 +93,7 @@ describe('AccountsService', () => {
     it('should return account when found', async () => {
       accountRepository.findOne.mockResolvedValue(mockAccount);
 
-      const result = await service.findById('uuid-1', 'tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.findById('uuid-1'));
 
       expect(result).toEqual(mockAccount);
     });
@@ -93,7 +101,8 @@ describe('AccountsService', () => {
     it('should throw NotFoundException when account not found', async () => {
       accountRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('not-found', 'tenant-1')).rejects.toThrow(NotFoundException);
+      await expect(runWithTenant('tenant-1', () => service.findById('not-found')))
+        .rejects.toThrow(NotFoundException);
     });
   });
 
@@ -108,13 +117,12 @@ describe('AccountsService', () => {
       accountRepository.create.mockReturnValue(createdAccount);
       accountRepository.save.mockResolvedValue(createdAccount);
 
-      const result = await service.create(
-        {
+      const result = await runWithTenant('tenant-1', () =>
+        service.create({
           name: 'Bank',
           type: AccountType.ASSETS,
           currency: 'USD',
-        },
-        'tenant-1',
+        }),
       );
 
       expect(result).toBeDefined();
@@ -135,14 +143,13 @@ describe('AccountsService', () => {
       accountRepository.create.mockReturnValue(childAccount);
       accountRepository.save.mockResolvedValue(childAccount);
 
-      const result = await service.create(
-        {
+      const result = await runWithTenant('tenant-1', () =>
+        service.create({
           name: 'bank',
           type: AccountType.ASSETS,
           currency: 'USD',
           parent_id: 'uuid-1',
-        } as any,
-        'tenant-1',
+        } as any),
       );
 
       expect(result.path).toBe('assets:bank');
@@ -154,14 +161,13 @@ describe('AccountsService', () => {
       accountRepository.findOne.mockResolvedValue(parentAccount);
 
       await expect(
-        service.create(
-          {
+        runWithTenant('tenant-1', () =>
+          service.create({
             name: 'loan',
             type: AccountType.LIABILITIES,
             currency: 'USD',
             parent_id: 'uuid-1',
-          } as any,
-          'tenant-1',
+          } as any),
         ),
       ).rejects.toThrow(BadRequestException);
     });
@@ -180,14 +186,13 @@ describe('AccountsService', () => {
       accountRepository.create.mockReturnValue(childAccount);
       accountRepository.save.mockResolvedValue(childAccount);
 
-      const result = await service.create(
-        {
+      const result = await runWithTenant('tenant-1', () =>
+        service.create({
           name: 'savings',
           type: AccountType.ASSETS,
           currency: 'USD',
           parent_id: 'uuid-1',
-        } as any,
-        'tenant-1',
+        } as any),
       );
 
       expect(result).toBeDefined();
@@ -203,10 +208,8 @@ describe('AccountsService', () => {
 
       accountRepository.save.mockResolvedValue(updatedAccount);
 
-      const result = await service.update(
-        'uuid-1',
-        { name: 'Updated Bank' },
-        'tenant-1',
+      const result = await runWithTenant('tenant-1', () =>
+        service.update('uuid-1', { name: 'Updated Bank' }),
       );
 
       expect(result.name).toBe('Updated Bank');
@@ -220,14 +223,15 @@ describe('AccountsService', () => {
       accountRepository.findOne.mockResolvedValue(accountWithChildren);
       (accountRepository.findDescendants as jest.Mock).mockResolvedValue([mockAccount, childAccount]);
 
-      await expect(service.delete('uuid-1', 'tenant-1')).rejects.toThrow(BadRequestException);
+      await expect(runWithTenant('tenant-1', () => service.delete('uuid-1')))
+        .rejects.toThrow(BadRequestException);
     });
 
     it('should remove account when no children', async () => {
       accountRepository.findOne.mockResolvedValue(mockAccount);
       accountRepository.remove.mockResolvedValue(mockAccount);
 
-      await service.delete('uuid-1', 'tenant-1');
+      await runWithTenant('tenant-1', () => service.delete('uuid-1'));
 
       expect(accountRepository.remove).toHaveBeenCalledWith(mockAccount);
     });

@@ -5,6 +5,7 @@ import { Account, AccountType } from '../accounts/account.entity';
 import { JournalEntry } from '../journal/journal-entry.entity';
 import { JournalLine } from '../journal/journal-line.entity';
 import { RateEngine } from '../rates/rate.engine';
+import { TenantContext } from '../common/context/tenant.context';
 
 export interface BalanceQuery {
   date_range?: { from: string; to: string };
@@ -77,11 +78,12 @@ export class QueryService {
     private rateEngine: RateEngine,
   ) {}
 
-  async getBalances(tenantId: string, query: BalanceQuery): Promise<{
+  async getBalances(query: BalanceQuery): Promise<{
     balances: AccountBalance[];
     pagination: { offset: number; limit: number; total: number; has_more: boolean };
     meta: { cache_hit: boolean; calculated_at: string };
   }> {
+    const tenantId = TenantContext.requireTenantId();
     const cacheKey = this.generateCacheKey('balances', tenantId, query);
     const cached = this.getFromCache(cacheKey);
     if (cached && query.use_cache !== false) {
@@ -103,6 +105,7 @@ export class QueryService {
       accounts.map(async (account) => {
         const currencyBalances = await this.calculateAccountBalance(
           account.id,
+          tenantId,
           query.date_range,
         );
 
@@ -180,11 +183,12 @@ export class QueryService {
     return result;
   }
 
-  async getJournalEntries(tenantId: string, query: JournalQuery): Promise<{
+  async getJournalEntries(query: JournalQuery): Promise<{
     entries: JournalEntry[];
     pagination: { offset: number; limit: number; total: number; has_more: boolean };
     meta: { cache_hit: boolean };
   }> {
+    const tenantId = TenantContext.requireTenantId();
     const offset = query.pagination?.offset || 0;
     const limit = query.pagination?.limit || 50;
 
@@ -214,7 +218,8 @@ export class QueryService {
     };
   }
 
-  async getSummary(tenantId: string): Promise<DashboardSummary> {
+  async getSummary(): Promise<DashboardSummary> {
+    const tenantId = TenantContext.requireTenantId();
     // Get all accounts
     const accounts = await this.accountRepository.find({
       where: { tenant_id: tenantId, is_active: true },
@@ -224,7 +229,7 @@ export class QueryService {
     const assetAccounts = accounts.filter(a => a.type === 'assets');
     let totalAssets = 0;
     for (const account of assetAccounts) {
-      const balances = await this.calculateAccountBalance(account.id);
+      const balances = await this.calculateAccountBalance(account.id, tenantId);
       totalAssets += balances.reduce((sum, b) => sum + b.amount, 0);
     }
 
@@ -232,7 +237,7 @@ export class QueryService {
     const liabilityAccounts = accounts.filter(a => a.type === 'liabilities');
     let totalLiabilities = 0;
     for (const account of liabilityAccounts) {
-      const balances = await this.calculateAccountBalance(account.id);
+      const balances = await this.calculateAccountBalance(account.id, tenantId);
       totalLiabilities += balances.reduce((sum, b) => sum + b.amount, 0);
     }
 
@@ -264,23 +269,25 @@ export class QueryService {
   }
 
   async calculateSubtreeBalance(accountId: string, dateRange?: { from: string; to: string }): Promise<CurrencyBalance[]> {
+    const tenantId = TenantContext.requireTenantId();
     const accountIds = await this.getDescendantIds(accountId);
     
     const allBalances: CurrencyBalance[] = [];
     
     for (const id of accountIds) {
-      const accountBalance = await this.calculateAccountBalance(id, dateRange);
+      const accountBalance = await this.calculateAccountBalance(id, tenantId, dateRange);
       allBalances.push(...accountBalance);
     }
     
     return this.mergeCurrencies(allBalances);
   }
 
-  private async calculateAccountBalance(accountId: string, dateRange?: { from: string; to: string }): Promise<CurrencyBalance[]> {
+  private async calculateAccountBalance(accountId: string, tenantId: string, dateRange?: { from: string; to: string }): Promise<CurrencyBalance[]> {
     const query = this.journalLineRepository
       .createQueryBuilder('line')
       .select(['line.currency', 'SUM(COALESCE(line.converted_amount, line.amount)) as total'])
       .where('line.account_id = :accountId', { accountId })
+      .andWhere('line.tenant_id = :tenantId', { tenantId })
       .groupBy('line.currency');
 
     if (dateRange) {
@@ -299,13 +306,15 @@ export class QueryService {
   }
 
   private async getDescendantIds(accountId: string): Promise<string[]> {
-    const account = await this.accountRepository.findOne({ where: { id: accountId } });
+    const tenantId = TenantContext.requireTenantId();
+    const account = await this.accountRepository.findOne({ where: { id: accountId, tenant_id: tenantId } });
     if (!account) return [accountId];
 
     const descendants = await this.accountRepository
       .createQueryBuilder('account')
       .where('account.path LIKE :path', { path: `${account.path}%` })
       .andWhere('account.id != :accountId', { accountId })
+      .andWhere('account.tenant_id = :tenantId', { tenantId })
       .getMany();
 
     return [accountId, ...descendants.map((d) => d.id)];

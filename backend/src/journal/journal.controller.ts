@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JournalService } from './journal.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -13,36 +13,35 @@ export class JournalController {
   @Get()
   @ApiOperation({ summary: 'Get journal entries' })
   async findAll(
-    @Request() req,
     @Query('offset') offset?: number,
     @Query('limit') limit?: number,
   ) {
-    const entries = await this.journalService.findAll(req.user.tenantId, { offset, limit });
+    const entries = await this.journalService.findAll({ offset, limit });
     return { entries };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get journal entry by ID' })
-  async findById(@Param('id') id: string, @Request() req) {
-    return this.journalService.findById(id, req.user.tenantId);
+  async findById(@Param('id') id: string) {
+    return this.journalService.findById(id);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create journal entry' })
-  async create(@Body() data: any, @Request() req) {
-    return this.journalService.create(data, req.user.tenantId, req.user.userId);
+  async create(@Body() data: any) {
+    return this.journalService.create(data);
   }
 
   @Put(':id')
   @ApiOperation({ summary: 'Update journal entry' })
-  async update(@Param('id') id: string, @Body() data: any, @Request() req) {
-    return this.journalService.update(id, data, req.user.tenantId, req.user.userId);
+  async update(@Param('id') id: string, @Body() data: any) {
+    return this.journalService.update(id, data);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete journal entry' })
-  async delete(@Param('id') id: string, @Request() req) {
-    await this.journalService.delete(id, req.user.tenantId);
+  async delete(@Param('id') id: string) {
+    await this.journalService.delete(id);
     return { success: true };
   }
 }

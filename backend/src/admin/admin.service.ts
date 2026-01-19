@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -17,6 +16,7 @@ import { Budget } from '../budgets/budget.entity';
 import { Provider, ProviderType } from '../rates/provider.entity';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
+import { TenantContext } from '../common/context/tenant.context';
 
 // ============================================================================
 // DTOs
@@ -116,8 +116,11 @@ export class AdminService {
     ipAddress?: string,
     userAgent?: string,
   ): Promise<AuditLog> {
+    const tenantId = TenantContext.tenantId; // May be undefined for cross-tenant ops
+
     const log = this.auditLogRepository.create({
       id: uuidv4(),
+      tenant_id: tenantId || undefined, // Pass tenant_id from context (TypeORM handles UUID conversion)
       user_id: userId,
       action,
       entity_type: entityType,
@@ -637,7 +640,7 @@ export class AdminService {
       case 'full':
         const accounts = await this.accountRepository.find({ where: { tenant_id: tenantId } });
         const entries = await this.journalEntryRepository.find({ where: { tenant_id: tenantId } });
-        const lines = await this.journalLineRepository.find();
+        const lines = await this.journalLineRepository.find({ where: { tenant_id: tenantId } });
         const currencies = await this.currencyRepository.find();
         const rates = await this.exchangeRateRepository.find();
         const budgets = await this.budgetRepository.find({ where: { tenant_id: tenantId } });
@@ -652,7 +655,7 @@ export class AdminService {
 
       case 'journal':
         const journalEntries = await this.journalEntryRepository.find({ where: { tenant_id: tenantId } });
-        const journalLines = await this.journalLineRepository.find();
+        const journalLines = await this.journalLineRepository.find({ where: { tenant_id: tenantId } });
         data = { entries: journalEntries, lines: journalLines };
         recordCount = journalEntries.length + journalLines.length;
         break;

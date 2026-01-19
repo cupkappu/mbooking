@@ -8,9 +8,18 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { TenantContext } from './common/context/tenant.context';
 
 // Mock bcrypt
 jest.mock('bcrypt');
+
+// Helper for running tests with tenant context
+const runWithTenant = <T>(tenantId: string, callback: () => T): T => {
+  return TenantContext.run(
+    { tenantId, userId: 'user-1', requestId: 'req-1' },
+    callback,
+  );
+};
 
 // ============================================================================
 // 1. AUTHENTICATION MODULE TESTS
@@ -118,6 +127,7 @@ describe('AuthService', () => {
           id: mockUser.id,
           email: mockUser.email,
           name: mockUser.name,
+          role: mockUser.role,
         },
       });
     });
@@ -231,7 +241,7 @@ describe('AccountsService', () => {
       const mockAccounts = [mockAccount];
       accountRepository.find.mockResolvedValue(mockAccounts);
 
-      const result = await service.findAll('tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.findAll());
 
       expect(result).toEqual(mockAccounts);
     });
@@ -241,7 +251,7 @@ describe('AccountsService', () => {
     it('should return account when found', async () => {
       accountRepository.findOne.mockResolvedValue(mockAccount);
 
-      const result = await service.findById('uuid-1', 'tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.findById('uuid-1'));
 
       expect(result).toEqual(mockAccount);
     });
@@ -249,7 +259,8 @@ describe('AccountsService', () => {
     it('should throw NotFoundException when account not found', async () => {
       accountRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('not-found', 'tenant-1')).rejects.toThrow(NotFoundException);
+      await expect(runWithTenant('tenant-1', () => service.findById('not-found')))
+        .rejects.toThrow(NotFoundException);
     });
   });
 
@@ -272,13 +283,14 @@ describe('AccountsService', () => {
       }));
       (accountRepository.manager as any).save.mockImplementation((account: any) => Promise.resolve(account));
 
-      const result = await service.create(
-        {
-          name: 'Bank',
-          type: AccountType.ASSETS,
-          currency: 'USD',
-        } as any,
-        'tenant-1',
+      const result = await runWithTenant('tenant-1', () =>
+        service.create(
+          {
+            name: 'Bank',
+            type: AccountType.ASSETS,
+            currency: 'USD',
+          } as any,
+        ),
       );
 
       expect(result).toBeDefined();
@@ -298,14 +310,15 @@ describe('AccountsService', () => {
       accountRepository.create.mockReturnValue(childAccount);
       accountRepository.save.mockResolvedValue(childAccount);
 
-      const result = await service.create(
-        {
-          name: 'bank',
-          type: AccountType.ASSETS,
-          currency: 'USD',
-          parent_id: 'uuid-1',
-        } as any,
-        'tenant-1',
+      const result = await runWithTenant('tenant-1', () =>
+        service.create(
+          {
+            name: 'bank',
+            type: AccountType.ASSETS,
+            currency: 'USD',
+            parent_id: 'uuid-1',
+          } as any,
+        ),
       );
 
       expect(result.path).toBe('assets:bank');
@@ -320,7 +333,9 @@ describe('AccountsService', () => {
       // Mock findDescendants for TreeRepository
       (accountRepository as any).findDescendants.mockResolvedValue([accountWithChildren, {} as Account]);
 
-      await expect(service.delete('uuid-1', 'tenant-1')).rejects.toThrow(BadRequestException);
+      await expect(
+        runWithTenant('tenant-1', () => service.delete('uuid-1')),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should remove account when no children', async () => {
@@ -328,7 +343,7 @@ describe('AccountsService', () => {
       (accountRepository as any).findDescendants.mockResolvedValue([mockAccount]);
       accountRepository.remove.mockResolvedValue(mockAccount);
 
-      await service.delete('uuid-1', 'tenant-1');
+      await runWithTenant('tenant-1', () => service.delete('uuid-1'));
 
       expect(accountRepository.remove).toHaveBeenCalledWith(mockAccount);
     });
@@ -342,6 +357,7 @@ describe('AccountsService', () => {
 import { JournalService } from './journal/journal.service';
 import { JournalEntry } from './journal/journal-entry.entity';
 import { JournalLine } from './journal/journal-line.entity';
+import { QueryService } from './query/query.service';
 
 describe('JournalService', () => {
   let service: JournalService;
@@ -374,6 +390,7 @@ describe('JournalService', () => {
             create: jest.fn(),
             save: jest.fn(),
             remove: jest.fn(),
+            delete: jest.fn(),
           },
         },
         {
@@ -382,6 +399,12 @@ describe('JournalService', () => {
             create: jest.fn(),
             save: jest.fn(),
             delete: jest.fn(),
+          },
+        },
+        {
+          provide: QueryService,
+          useValue: {
+            invalidateCache: jest.fn(),
           },
         },
       ],
@@ -397,7 +420,7 @@ describe('JournalService', () => {
       const mockEntries = [mockJournalEntry];
       journalEntryRepository.find.mockResolvedValue(mockEntries);
 
-      const result = await service.findAll('tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.findAll());
 
       expect(result).toEqual(mockEntries);
     });
@@ -405,7 +428,9 @@ describe('JournalService', () => {
     it('should apply pagination options', async () => {
       journalEntryRepository.find.mockResolvedValue([]);
 
-      await service.findAll('tenant-1', { offset: 10, limit: 20 });
+      await runWithTenant('tenant-1', () =>
+        service.findAll({ offset: 10, limit: 20 }),
+      );
 
       expect(journalEntryRepository.find).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -428,14 +453,12 @@ describe('JournalService', () => {
       journalLineRepository.create.mockImplementation((data) => data as JournalLine);
       journalLineRepository.save.mockResolvedValue(balancedLines as any);
 
-      const result = await service.create(
-        {
+      const result = await runWithTenant('tenant-1', () =>
+        service.create({
           date: new Date('2025-01-15'),
           description: 'Balanced Transaction',
           lines: balancedLines,
-        },
-        'tenant-1',
-        'user-1',
+        }),
       );
 
       expect(result).toBeDefined();
@@ -448,14 +471,12 @@ describe('JournalService', () => {
       ];
 
       await expect(
-        service.create(
-          {
+        runWithTenant('tenant-1', () =>
+          service.create({
             date: new Date('2025-01-15'),
             description: 'Unbalanced Transaction',
             lines: unbalancedLines,
-          },
-          'tenant-1',
-          'user-1',
+          }),
         ),
       ).rejects.toThrow(BadRequestException);
     });
@@ -464,11 +485,11 @@ describe('JournalService', () => {
   describe('delete', () => {
     it('should remove journal entry', async () => {
       journalEntryRepository.findOne.mockResolvedValue(mockJournalEntry);
-      journalEntryRepository.remove.mockResolvedValue(mockJournalEntry);
+      journalEntryRepository.delete.mockResolvedValue({ affected: 1 } as any);
 
-      await service.delete('uuid-1', 'tenant-1');
+      await runWithTenant('tenant-1', () => service.delete('uuid-1'));
 
-      expect(journalEntryRepository.remove).toHaveBeenCalledWith(mockJournalEntry);
+      expect(journalEntryRepository.delete).toHaveBeenCalledWith('uuid-1');
     });
   });
 });
@@ -529,7 +550,7 @@ describe('BudgetsService', () => {
       const mockBudgets = [mockBudget];
       budgetRepository.find.mockResolvedValue(mockBudgets);
 
-      const result = await service.findAll('tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.findAll());
 
       expect(result).toEqual(mockBudgets);
     });
@@ -539,7 +560,7 @@ describe('BudgetsService', () => {
     it('should return budget when found', async () => {
       budgetRepository.findOne.mockResolvedValue(mockBudget);
 
-      const result = await service.findById('uuid-1', 'tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.findById('uuid-1'));
 
       expect(result).toEqual(mockBudget);
     });
@@ -547,7 +568,9 @@ describe('BudgetsService', () => {
     it('should throw NotFoundException when not found', async () => {
       budgetRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('not-found', 'tenant-1')).rejects.toThrow(NotFoundException);
+      await expect(
+        runWithTenant('tenant-1', () => service.findById('not-found')),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -555,7 +578,7 @@ describe('BudgetsService', () => {
     it('should return progress calculation', async () => {
       budgetRepository.findOne.mockResolvedValue(mockBudget);
 
-      const result = await service.getProgress('uuid-1', 'tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.getProgress('uuid-1'));
 
       expect(result.progress).toBe(50);
       expect(result.remaining).toBe(2500);
@@ -567,7 +590,7 @@ describe('BudgetsService', () => {
       const highSpendingBudget = { ...mockBudget, spent_amount: 4500, alert_threshold: 0.8 };
       budgetRepository.findOne.mockResolvedValue(highSpendingBudget);
 
-      const result = await service.getProgress('uuid-1', 'tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.getProgress('uuid-1'));
 
       expect(result.progress).toBe(90);
       expect(result.is_alert).toBe(true);
@@ -577,7 +600,7 @@ describe('BudgetsService', () => {
       const exceededBudget = { ...mockBudget, spent_amount: 6000 };
       budgetRepository.findOne.mockResolvedValue(exceededBudget);
 
-      const result = await service.getProgress('uuid-1', 'tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.getProgress('uuid-1'));
 
       expect(result.progress).toBe(100);
       expect(result.is_exceeded).toBe(true);
@@ -589,7 +612,6 @@ describe('BudgetsService', () => {
 // 5. QUERY ENGINE TESTS
 // ============================================================================
 
-import { QueryService } from './query/query.service';
 import { RateEngine } from './rates/rate.engine';
 
 describe('QueryService', () => {
@@ -670,7 +692,7 @@ describe('QueryService', () => {
       };
       journalLineRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder as any);
 
-      const result = await service.getBalances('tenant-1', {});
+      const result = await runWithTenant('tenant-1', () => service.getBalances({}));
 
       expect(result.balances).toBeDefined();
       expect(result.pagination).toBeDefined();
@@ -699,10 +721,12 @@ describe('QueryService', () => {
         source: 'test',
       });
 
-      const result = await service.getBalances('tenant-1', {
-        convert_to: 'EUR',
-        exchange_rate_date: 'latest',
-      });
+      const result = await runWithTenant('tenant-1', () =>
+        service.getBalances({
+          convert_to: 'EUR',
+          exchange_rate_date: 'latest',
+        }),
+      );
 
       expect(rateEngine.getRate).toHaveBeenCalled();
     });
@@ -725,9 +749,11 @@ describe('QueryService', () => {
       }];
       journalEntryRepository.findAndCount.mockResolvedValue([mockEntries, 1]);
 
-      const result = await service.getJournalEntries('tenant-1', {
-        pagination: { offset: 0, limit: 10 },
-      });
+       const result = await runWithTenant('tenant-1', () =>
+        service.getJournalEntries({
+          pagination: { offset: 0, limit: 10 },
+        }),
+      );
 
       expect(result.entries).toEqual(mockEntries);
       expect(result.pagination.total).toBe(1);

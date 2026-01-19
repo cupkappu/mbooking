@@ -130,12 +130,14 @@ describe('AuthService', () => {
           id: mockUser.id,
           email: mockUser.email,
           name: mockUser.name,
+          role: mockUser.role,
         },
       });
       expect(jwtService.sign).toHaveBeenCalledWith({
         sub: mockUser.id,
         email: mockUser.email,
         tenant_id: mockUser.tenant_id,
+        role: mockUser.role,
       });
     });
   });

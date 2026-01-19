@@ -5,6 +5,15 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { JournalService } from './journal.service';
 import { JournalEntry } from './journal-entry.entity';
 import { JournalLine } from './journal-line.entity';
+import { QueryService } from '../query/query.service';
+import { TenantContext } from '../common/context/tenant.context';
+
+const runWithTenant = <T>(tenantId: string, callback: () => T): T => {
+  return TenantContext.run(
+    { tenantId, userId: 'user-1', requestId: 'req-1' },
+    callback,
+  );
+};
 
 describe('JournalService', () => {
   let service: JournalService;
@@ -37,6 +46,7 @@ describe('JournalService', () => {
             create: jest.fn(),
             save: jest.fn(),
             remove: jest.fn(),
+            delete: jest.fn(),
           },
         },
         {
@@ -45,6 +55,12 @@ describe('JournalService', () => {
             create: jest.fn(),
             save: jest.fn(),
             delete: jest.fn(),
+          },
+        },
+        {
+          provide: QueryService,
+          useValue: {
+            invalidateCache: jest.fn(),
           },
         },
       ],
@@ -60,7 +76,7 @@ describe('JournalService', () => {
       const mockEntries = [mockJournalEntry];
       journalEntryRepository.find.mockResolvedValue(mockEntries);
 
-      const result = await service.findAll('tenant-1');
+      const result = await runWithTenant('tenant-1', () => service.findAll());
 
       expect(result).toEqual(mockEntries);
       expect(journalEntryRepository.find).toHaveBeenCalledWith({
@@ -75,7 +91,9 @@ describe('JournalService', () => {
     it('should apply pagination options', async () => {
       journalEntryRepository.find.mockResolvedValue([]);
 
-      await service.findAll('tenant-1', { offset: 10, limit: 20 });
+      await runWithTenant('tenant-1', () =>
+        service.findAll({ offset: 10, limit: 20 }),
+      );
 
       expect(journalEntryRepository.find).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -94,7 +112,9 @@ describe('JournalService', () => {
       };
       journalEntryRepository.findOne.mockResolvedValue(mockEntryWithLines);
 
-      const result = await service.findById('uuid-1', 'tenant-1');
+      const result = await runWithTenant('tenant-1', () =>
+        service.findById('uuid-1'),
+      );
 
       expect(result).toEqual(mockEntryWithLines);
     });
@@ -102,7 +122,9 @@ describe('JournalService', () => {
     it('should throw NotFoundException when not found', async () => {
       journalEntryRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.findById('not-found', 'tenant-1')).rejects.toThrow(NotFoundException);
+      await expect(
+        runWithTenant('tenant-1', () => service.findById('not-found')),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -119,14 +141,12 @@ describe('JournalService', () => {
       journalLineRepository.create.mockImplementation((data) => data as JournalLine);
       journalLineRepository.save.mockResolvedValue(balancedLines as any);
 
-      const result = await service.create(
-        {
+      const result = await runWithTenant('tenant-1', () =>
+        service.create({
           date: new Date('2025-01-15'),
           description: 'Balanced Transaction',
           lines: balancedLines,
-        },
-        'tenant-1',
-        'user-1',
+        }),
       );
 
       expect(result).toBeDefined();
@@ -140,14 +160,12 @@ describe('JournalService', () => {
       ];
 
       await expect(
-        service.create(
-          {
+        runWithTenant('tenant-1', () =>
+          service.create({
             date: new Date('2025-01-15'),
             description: 'Unbalanced Transaction',
             lines: unbalancedLines,
-          },
-          'tenant-1',
-          'user-1',
+          }),
         ),
       ).rejects.toThrow(BadRequestException);
     });
@@ -169,26 +187,25 @@ describe('JournalService', () => {
       journalLineRepository.save.mockResolvedValue(balancedLines as any);
       journalEntryRepository.save.mockResolvedValue(updatedEntry);
 
-      const result = await service.update(
-        'uuid-1',
-        { description: 'Updated', lines: balancedLines },
-        'tenant-1',
-        'user-1',
+      const result = await runWithTenant('tenant-1', () =>
+        service.update('uuid-1', { description: 'Updated', lines: balancedLines }),
       );
 
       expect(result.description).toBe('Updated');
-      expect(journalLineRepository.delete).toHaveBeenCalledWith({ journal_entry_id: 'uuid-1' });
+      expect(journalLineRepository.delete).toHaveBeenCalledWith({
+        journal_entry_id: 'uuid-1',
+      });
     });
   });
 
   describe('delete', () => {
     it('should remove journal entry', async () => {
       journalEntryRepository.findOne.mockResolvedValue(mockJournalEntry);
-      journalEntryRepository.remove.mockResolvedValue(mockJournalEntry);
+      journalEntryRepository.delete.mockResolvedValue({ affected: 1 } as any);
 
-      await service.delete('uuid-1', 'tenant-1');
+      await runWithTenant('tenant-1', () => service.delete('uuid-1'));
 
-      expect(journalEntryRepository.remove).toHaveBeenCalledWith(mockJournalEntry);
+      expect(journalEntryRepository.delete).toHaveBeenCalledWith('uuid-1');
     });
   });
 });

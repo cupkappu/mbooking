@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, TreeRepository } from 'typeorm';
 import { Account, AccountType } from './account.entity';
+import { TenantContext } from '../common/context/tenant.context';
 
 @Injectable()
 export class AccountsService {
@@ -10,15 +11,20 @@ export class AccountsService {
     private accountRepository: TreeRepository<Account>,
   ) {}
 
-  async findAll(tenantId: string): Promise<Account[]> {
+  private getTenantId(): string {
+    return TenantContext.requireTenantId();
+  }
+
+  async findAll(): Promise<Account[]> {
+    const tenantId = this.getTenantId();
     return this.accountRepository.find({
       where: { tenant_id: tenantId, is_active: true },
       order: { path: 'ASC' },
     });
   }
 
-  async findTree(tenantId: string): Promise<Account[]> {
-    // Use QueryBuilder to load parent relation with tenant filter
+  async findTree(): Promise<Account[]> {
+    const tenantId = this.getTenantId();
     const accounts = await this.accountRepository
       .createQueryBuilder('account')
       .leftJoinAndSelect('account.parent', 'parent')
@@ -27,7 +33,6 @@ export class AccountsService {
       .orderBy('account.path', 'ASC')
       .getMany();
     
-    // Convert to plain objects with parent_id
     return accounts.map(account => ({
       id: account.id,
       tenant_id: account.tenant_id,
@@ -44,7 +49,8 @@ export class AccountsService {
     })) as unknown as Account[];
   }
 
-  async findById(id: string, tenantId: string): Promise<Account> {
+  async findById(id: string): Promise<Account> {
+    const tenantId = this.getTenantId();
     const account = await this.accountRepository.findOne({
       where: { id, tenant_id: tenantId },
     });
@@ -54,8 +60,8 @@ export class AccountsService {
     return account;
   }
 
-  async create(data: Partial<Account>, tenantId: string): Promise<Account> {
-    // Handle empty string parent_id as null
+  async create(data: Partial<Account>): Promise<Account> {
+    const tenantId = this.getTenantId();
     const parentId = (data as any).parent_id === '' ? null : (data as any).parent_id;
 
     let path = data.name || '';
@@ -63,9 +69,8 @@ export class AccountsService {
     let parent: Account | null = null;
 
     if (parentId) {
-      parent = await this.findById(parentId, tenantId);
+      parent = await this.findById(parentId);
       
-      // Validate: child account type must match parent account type
       if (parent.type !== data.type) {
         throw new BadRequestException(
           `Child account type "${data.type}" must match parent account type "${parent.type}"`
@@ -76,7 +81,6 @@ export class AccountsService {
       depth = parent.depth + 1;
     }
 
-    // Create account
     const account = this.accountRepository.create({
       ...data,
       tenant_id: tenantId,
@@ -84,23 +88,22 @@ export class AccountsService {
       depth,
     });
 
-    // Set parent relation if exists
     if (parent) {
       (account as any).parent = parent;
     }
 
-    // Use manager to ensure parent relation is properly saved
     const saved = await this.accountRepository.manager.save(account);
     return saved as Account;
   }
 
-  async update(id: string, data: Partial<Account>, tenantId: string): Promise<Account> {
-    const account = await this.findById(id, tenantId);
+  async update(id: string, data: Partial<Account>): Promise<Account> {
+    const tenantId = this.getTenantId();
+    const account = await this.findById(id);
     
     if (data.name && data.name !== account.name) {
       const parentId = (account as any).parentIdId;
       if (parentId) {
-        const parent = await this.findById(parentId, tenantId);
+        const parent = await this.findById(parentId);
         data.path = `${parent.path}:${data.name}`;
       } else {
         data.path = data.name;
@@ -111,8 +114,8 @@ export class AccountsService {
     return this.accountRepository.save(account);
   }
 
-  async delete(id: string, tenantId: string): Promise<void> {
-    const account = await this.findById(id, tenantId);
+  async delete(id: string): Promise<void> {
+    const account = await this.findById(id);
     
     const children = await this.accountRepository.findDescendants(account);
     if (children.length > 1) {
@@ -122,12 +125,8 @@ export class AccountsService {
     await this.accountRepository.remove(account);
   }
 
-  async moveAccount(
-    id: string,
-    newParentId: string | null,
-    tenantId: string,
-  ): Promise<Account> {
-    const account = await this.findById(id, tenantId);
+  async moveAccount(id: string, newParentId: string | null): Promise<Account> {
+    const account = await this.findById(id);
 
     if (newParentId === id) {
       throw new BadRequestException('Cannot move account to itself');
@@ -135,7 +134,7 @@ export class AccountsService {
 
     let newParent: Account | null = null;
     if (newParentId) {
-      newParent = await this.findById(newParentId, tenantId);
+      newParent = await this.findById(newParentId);
 
       const descendants = await this.accountRepository.findDescendants(account);
       const descendantIds = descendants.map(d => d.id);
@@ -170,10 +169,10 @@ export class AccountsService {
       await this.accountRepository.save(descendants);
     }
 
-    return this.findById(id, tenantId);
+    return this.findById(id);
   }
 
-  async getBalance(accountId: string, tenantId: string): Promise<any[]> {
+  async getBalance(accountId: string): Promise<any[]> {
     // TODO: Implement balance calculation with journal entries
     return [];
   }
