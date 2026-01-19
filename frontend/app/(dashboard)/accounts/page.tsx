@@ -21,6 +21,7 @@ import {
 import { currenciesApi } from '@/lib/currencies';
 import type { Currency } from '@/types/currency';
 import { BalanceCell } from '@/components/accounts/BalanceCell';
+import { TotalCell } from '@/components/accounts/TotalCell';
 import type { CurrencyBalance, AccountBalance } from '@/types';
 
 function formatCurrency(amount: number, currency: string = 'USD'): string {
@@ -59,9 +60,14 @@ export default function AccountsPage() {
   const [selectedParent, setSelectedParent] = useState('all');
   const [displayCurrency, setDisplayCurrency] = useState<string>('USD');
   const [availableCurrencies, setAvailableCurrencies] = useState<Currency[]>([]);
+  const [maxExpandedDepth, setMaxExpandedDepth] = useState<number>(1);
 
   const { data: accounts, isLoading: accountsLoading, refetch: refetchAccounts } = useAccounts();
-  const { data: balancesData, isLoading: balancesLoading, refetch: refetchBalances } = useBalances({ depth: 1, convert_to: displayCurrency, include_subtree: true });
+  const { data: balancesData, isLoading: balancesLoading, refetch: refetchBalances } = useBalances({ 
+    depth: maxExpandedDepth, 
+    convert_to: displayCurrency, 
+    include_subtree: true 
+  });
   const createAccount = useCreateAccount();
   const updateAccount = useUpdateAccount();
   const deleteAccount = useDeleteAccount();
@@ -169,6 +175,40 @@ export default function AccountsPage() {
     setShowForm(true);
   };
 
+  // Get maximum depth from all accounts
+  const getMaxAccountDepth = (): number => {
+    let maxDepth = 1;
+    for (const account of accounts || []) {
+      maxDepth = Math.max(maxDepth, account.depth);
+    }
+    return maxDepth;
+  };
+
+  const getMaxDepthForExpandedAccounts = (): number => {
+    const maxDepth = getMaxAccountDepth();
+    
+    if (expandedAccounts.size === 0) {
+      return 1;
+    }
+    
+    let requiredDepth = 1;
+    
+    for (const expandedId of Array.from(expandedAccounts)) {
+      const expandedAccount = accounts?.find((a: Account) => a.id === expandedId);
+      if (expandedAccount) {
+        requiredDepth = Math.max(requiredDepth, maxDepth);
+      }
+    }
+    
+    for (const account of accounts || []) {
+      if (account.parent_id && expandedAccounts.has(account.parent_id)) {
+        requiredDepth = Math.max(requiredDepth, account.depth);
+      }
+    }
+    
+    return requiredDepth;
+  };
+
   const toggleExpand = (accountId: string) => {
     const newExpanded = new Set(expandedAccounts);
     if (newExpanded.has(accountId)) {
@@ -177,6 +217,7 @@ export default function AccountsPage() {
       newExpanded.add(accountId);
     }
     setExpandedAccounts(newExpanded);
+    setMaxExpandedDepth(getMaxDepthForExpandedAccounts());
   };
 
   const handleCurrencyChange = (currencyCode: string) => {
@@ -250,9 +291,15 @@ export default function AccountsPage() {
 
             <span className="text-sm text-muted-foreground shrink-0">{account.currency}</span>
 
-            <div className="w-48 text-right shrink-0">
+            <div className="w-36 text-right shrink-0">
               <BalanceCell
                 currencies={balance?.currencies || []}
+                displayCurrency={displayCurrency}
+              />
+            </div>
+            
+            <div className="w-36 text-right shrink-0">
+              <TotalCell
                 subtreeCurrencies={balance?.subtree_currencies}
                 convertedSubtreeTotal={balance?.converted_subtree_total}
                 displayCurrency={displayCurrency}
@@ -375,13 +422,14 @@ export default function AccountsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto] gap-2 px-3 pb-2 text-sm text-muted-foreground border-b">
+          <div className="grid grid-cols-[auto_auto_1fr_auto_auto_auto_auto] gap-2 px-3 pb-2 text-sm text-muted-foreground border-b">
             <div className="w-6" />
             <div className="w-6" />
             <div className="min-w-0">Account</div>
             <div className="w-20">Type</div>
             <div className="w-16">Currency</div>
-            <div className="w-48 text-right">Balance</div>
+            <div className="w-36 text-right">Balance</div>
+            <div className="w-36 text-right">Total</div>
             <div className="w-20" />
           </div>
 

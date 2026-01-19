@@ -89,6 +89,7 @@ export class QueryService {
     }
 
     const depth = query.depth || 1;
+    
     let accounts = await this.accountRepository.find({
       where: { tenant_id: tenantId, is_active: true },
       order: { path: 'ASC' },
@@ -278,7 +279,7 @@ export class QueryService {
   private async calculateAccountBalance(accountId: string, dateRange?: { from: string; to: string }): Promise<CurrencyBalance[]> {
     const query = this.journalLineRepository
       .createQueryBuilder('line')
-      .select(['line.currency', 'SUM(line.converted_amount) as total'])
+      .select(['line.currency', 'SUM(COALESCE(line.converted_amount, line.amount)) as total'])
       .where('line.account_id = :accountId', { accountId })
       .groupBy('line.currency');
 
@@ -304,6 +305,7 @@ export class QueryService {
     const descendants = await this.accountRepository
       .createQueryBuilder('account')
       .where('account.path LIKE :path', { path: `${account.path}%` })
+      .andWhere('account.id != :accountId', { accountId })
       .getMany();
 
     return [accountId, ...descendants.map((d) => d.id)];
@@ -344,7 +346,11 @@ export class QueryService {
 
     for (const balance of balances) {
       const pathParts = balance.account.path.split(':');
-      const groupKey = pathParts.slice(0, Math.min(depth, pathParts.length)).join(':');
+      // Use full path if account depth equals or exceeds requested depth (show separately)
+      // Otherwise, group by path prefix (merge into parent)
+      const groupKey = balance.account.depth >= depth 
+        ? balance.account.path 
+        : pathParts.slice(0, Math.min(depth, pathParts.length)).join(':');
 
       if (!grouped.has(groupKey)) {
         grouped.set(groupKey, []);
@@ -353,7 +359,28 @@ export class QueryService {
     }
 
     return Array.from(grouped.entries()).map(([key, group]) => {
-      const mergedCurrencies = this.mergeCurrencies(group.flatMap((b) => b.currencies));
+      // For the parent account (path exactly matches groupKey), keep its own currencies
+      // For child accounts, only include their balances in subtree_currencies
+      const parentBalance = group.find((b) => b.account.path === key);
+
+      // Use parent's own currencies, NOT merged from all children
+      const mergedCurrencies = parentBalance?.currencies || [];
+
+      // Merge subtree_currencies if any account has them (parent's subtree includes all descendants)
+      const allSubtreeCurrencies = group.flatMap((b) => b.subtree_currencies || []);
+      const mergedSubtreeCurrencies = allSubtreeCurrencies.length > 0
+        ? this.mergeCurrencies(allSubtreeCurrencies)
+        : undefined;
+
+      // Calculate total converted subtree if any account has it
+      const convertedSubtreeTotals = group
+        .filter((b) => b.converted_subtree_total !== undefined)
+        .map((b) => b.converted_subtree_total!);
+      const convertedSubtreeTotal = convertedSubtreeTotals.length > 0
+        ? convertedSubtreeTotals.reduce((sum, t) => sum + t, 0)
+        : undefined;
+      const convertedSubtreeCurrency = group.find((b) => b.converted_subtree_currency)?.converted_subtree_currency;
+
       const pathParts = key.split(':');
 
       const mergedAccount: Account = {
@@ -375,6 +402,10 @@ export class QueryService {
       return {
         account: mergedAccount,
         currencies: mergedCurrencies,
+        // Use parent's subtree_currencies if available, otherwise use merged
+        subtree_currencies: parentBalance?.subtree_currencies || mergedSubtreeCurrencies,
+        converted_subtree_total: parentBalance?.converted_subtree_total || convertedSubtreeTotal,
+        converted_subtree_currency: parentBalance?.converted_subtree_currency || convertedSubtreeCurrency,
       };
     });
   }
