@@ -17,6 +17,7 @@ const config: Config = {
   ],
   testPathIgnorePatterns: [
     '/node_modules/',
+    '/tests/', // E2E tests are run with Playwright, not Jest
   ],
   transformIgnorePatterns: [
     '/node_modules/(?!(.*\\.mjs$|@radix-ui|clsx|tailwind-merge|class-variance-authority|lucide-react|@hookform|recharts|zod|date-fns))',
