@@ -1,9 +1,11 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import AccountsPage from './page';
-import { useAccounts, useCreateAccount, useBalances } from '@/hooks/use-api';
+import { useAccounts, useCreateAccount, useUpdateAccount, useBalances } from '@/hooks/use-api';
+import { useCurrencies } from '@/hooks/use-currencies';
 import { currenciesApi } from '@/lib/currencies';
 
 jest.mock('@/hooks/use-api');
+jest.mock('@/hooks/use-currencies');
 jest.mock('@/lib/currencies');
 
 const mockAccounts = [
@@ -86,9 +88,19 @@ describe('AccountsPage', () => {
       refetch: jest.fn(),
     });
 
-    (useCreateAccount as jest.Mock).mockReturnValue({
+    (useCreateAccount as jest.Mock).mockImplementation(() => ({
       mutateAsync: jest.fn(),
       isPending: false,
+    }));
+
+    (useUpdateAccount as jest.Mock).mockImplementation(() => ({
+      mutateAsync: jest.fn(),
+      isPending: false,
+    }));
+
+    (useCurrencies as jest.Mock).mockReturnValue({
+      data: mockCurrencies,
+      isLoading: false,
     });
 
     (currenciesApi.getAll as jest.Mock).mockResolvedValue(mockCurrencies);

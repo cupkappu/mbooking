@@ -5,10 +5,12 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AccountsService } from './accounts.service';
 import { Account, AccountType } from './account.entity';
 import { TenantContext } from '../common/context/tenant.context';
+import { CurrenciesService } from '../currencies/currencies.service';
 
 describe('AccountsService', () => {
   let service: AccountsService;
   let accountRepository: any;
+  let currenciesService: jest.Mocked<CurrenciesService>;
 
   const mockAccount: Account = {
     id: 'uuid-1',
@@ -59,11 +61,18 @@ describe('AccountsService', () => {
             },
           },
         },
+        {
+          provide: CurrenciesService,
+          useValue: {
+            validateCurrencyExists: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<AccountsService>(AccountsService);
     accountRepository = module.get(getRepositoryToken(Account)) as any;
+    currenciesService = module.get(CurrenciesService);
   });
 
   describe('findAll', () => {
@@ -185,6 +194,7 @@ describe('AccountsService', () => {
       accountRepository.findOne.mockResolvedValue(parentAccount);
       accountRepository.create.mockReturnValue(childAccount);
       accountRepository.save.mockResolvedValue(childAccount);
+      currenciesService.validateCurrencyExists.mockResolvedValue({ code: 'USD' } as any);
 
       const result = await runWithTenant('tenant-1', () =>
         service.create({
@@ -198,6 +208,22 @@ describe('AccountsService', () => {
       expect(result).toBeDefined();
       expect(result.path).toBe('assets:savings');
       expect(result.depth).toBe(1);
+    });
+
+    it('should throw BadRequestException for invalid currency', async () => {
+      currenciesService.validateCurrencyExists.mockRejectedValue(
+        new BadRequestException("Currency 'INVALID' is not available. Contact your administrator."),
+      );
+
+      await expect(
+        runWithTenant('tenant-1', () =>
+          service.create({
+            name: 'Bank',
+            type: AccountType.ASSETS,
+            currency: 'INVALID',
+          }),
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -213,6 +239,19 @@ describe('AccountsService', () => {
       );
 
       expect(result.name).toBe('Updated Bank');
+    });
+
+    it('should throw BadRequestException for invalid currency on update', async () => {
+      accountRepository.findOne.mockResolvedValue(mockAccount);
+      currenciesService.validateCurrencyExists.mockRejectedValue(
+        new BadRequestException("Currency 'INVALID' is not available. Contact your administrator."),
+      );
+
+      await expect(
+        runWithTenant('tenant-1', () =>
+          service.update('uuid-1', { currency: 'INVALID' }),
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
