@@ -7,6 +7,7 @@ import { JournalEntry } from './journal-entry.entity';
 import { JournalLine } from './journal-line.entity';
 import { QueryService } from '../query/query.service';
 import { TenantContext } from '../common/context/tenant.context';
+import { CurrenciesService } from '../currencies/currencies.service';
 
 const runWithTenant = <T>(tenantId: string, callback: () => T): T => {
   return TenantContext.run(
@@ -19,6 +20,7 @@ describe('JournalService', () => {
   let service: JournalService;
   let journalEntryRepository: jest.Mocked<Repository<JournalEntry>>;
   let journalLineRepository: jest.Mocked<Repository<JournalLine>>;
+  let currenciesService: jest.Mocked<CurrenciesService>;
 
   const mockJournalEntry: JournalEntry = {
     id: 'uuid-1',
@@ -63,12 +65,19 @@ describe('JournalService', () => {
             invalidateCache: jest.fn(),
           },
         },
+        {
+          provide: CurrenciesService,
+          useValue: {
+            validateCurrencyExists: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<JournalService>(JournalService);
     journalEntryRepository = module.get(getRepositoryToken(JournalEntry));
     journalLineRepository = module.get(getRepositoryToken(JournalLine));
+    currenciesService = module.get(CurrenciesService);
   });
 
   describe('findAll', () => {
@@ -169,6 +178,55 @@ describe('JournalService', () => {
         ),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('should throw BadRequestException for invalid currency', async () => {
+      const balancedLines = [
+        { account_id: 'acc-1', amount: 100, currency: 'INVALID', tags: [] },
+        { account_id: 'acc-2', amount: -100, currency: 'INVALID', tags: [] },
+      ];
+
+      currenciesService.validateCurrencyExists.mockRejectedValue(
+        new BadRequestException("Currency 'INVALID' is not available. Contact your administrator."),
+      );
+
+      await expect(
+        runWithTenant('tenant-1', () =>
+          service.create({
+            date: new Date('2025-01-15'),
+            description: 'Transaction with invalid currency',
+            lines: balancedLines,
+          }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should validate multiple currencies in entry', async () => {
+      const balancedLines = [
+        { account_id: 'acc-1', amount: 100, currency: 'USD', tags: [] },
+        { account_id: 'acc-2', amount: -100, currency: 'USD', tags: [] },
+        { account_id: 'acc-3', amount: 50, currency: 'EUR', tags: [] },
+        { account_id: 'acc-4', amount: -50, currency: 'EUR', tags: [] },
+      ];
+
+      const savedEntry = { ...mockJournalEntry, lines: balancedLines as any };
+      journalEntryRepository.create.mockReturnValue(mockJournalEntry);
+      journalEntryRepository.save.mockResolvedValue(mockJournalEntry);
+      journalLineRepository.create.mockImplementation((data) => data as JournalLine);
+      journalLineRepository.save.mockResolvedValue(balancedLines as any);
+      currenciesService.validateCurrencyExists.mockResolvedValue({ code: 'USD' } as any);
+
+      const result = await runWithTenant('tenant-1', () =>
+        service.create({
+          date: new Date('2025-01-15'),
+          description: 'Multi-currency Transaction',
+          lines: balancedLines,
+        }),
+      );
+
+      expect(result).toBeDefined();
+      expect(currenciesService.validateCurrencyExists).toHaveBeenCalledWith('USD');
+      expect(currenciesService.validateCurrencyExists).toHaveBeenCalledWith('EUR');
+    });
   });
 
   describe('update', () => {
@@ -186,6 +244,7 @@ describe('JournalService', () => {
       journalLineRepository.create.mockImplementation((data) => data as JournalLine);
       journalLineRepository.save.mockResolvedValue(balancedLines as any);
       journalEntryRepository.save.mockResolvedValue(updatedEntry);
+      currenciesService.validateCurrencyExists.mockResolvedValue({ code: 'USD' } as any);
 
       const result = await runWithTenant('tenant-1', () =>
         service.update('uuid-1', { description: 'Updated', lines: balancedLines }),
@@ -195,6 +254,25 @@ describe('JournalService', () => {
       expect(journalLineRepository.delete).toHaveBeenCalledWith({
         journal_entry_id: 'uuid-1',
       });
+    });
+
+    it('should throw BadRequestException for invalid currency on update', async () => {
+      const balancedLines = [
+        { account_id: 'acc-1', amount: 200, currency: 'INVALID', tags: [] },
+        { account_id: 'acc-2', amount: -200, currency: 'INVALID', tags: [] },
+      ];
+
+      const existingEntry = { ...mockJournalEntry };
+      journalEntryRepository.findOne.mockResolvedValue(existingEntry);
+      currenciesService.validateCurrencyExists.mockRejectedValue(
+        new BadRequestException("Currency 'INVALID' is not available. Contact your administrator."),
+      );
+
+      await expect(
+        runWithTenant('tenant-1', () =>
+          service.update('uuid-1', { description: 'Updated', lines: balancedLines }),
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

@@ -5,6 +5,7 @@ import { JournalEntry } from './journal-entry.entity';
 import { JournalLine } from './journal-line.entity';
 import { QueryService } from '../query/query.service';
 import { TenantContext } from '../common/context/tenant.context';
+import { CurrenciesService } from '../currencies/currencies.service';
 
 @Injectable()
 export class JournalService {
@@ -15,6 +16,7 @@ export class JournalService {
     private journalLineRepository: Repository<JournalLine>,
     @Inject(forwardRef(() => QueryService))
     private queryService: QueryService,
+    private currenciesService: CurrenciesService,
   ) {}
 
   private getTenantId(): string {
@@ -64,6 +66,7 @@ export class JournalService {
   }): Promise<JournalEntry> {
     const tenantId = this.getTenantId();
     const userId = this.getUserId();
+    await this.validateCurrencies(data.lines);
     this.validateBalancedLines(data.lines);
 
     const entry = this.journalEntryRepository.create({
@@ -107,12 +110,20 @@ export class JournalService {
     }
   }
 
+  private async validateCurrencies(lines: any[]): Promise<void> {
+    const uniqueCurrencies = new Set(lines.map((line) => line.currency));
+    for (const currency of uniqueCurrencies) {
+      await this.currenciesService.validateCurrencyExists(currency);
+    }
+  }
+
   async update(id: string, data: any): Promise<JournalEntry> {
     const tenantId = this.getTenantId();
     const userId = this.getUserId();
     const entry = await this.findById(id);
 
     if (data.lines) {
+      await this.validateCurrencies(data.lines);
       this.validateBalancedLines(data.lines);
       await this.journalLineRepository.delete({ journal_entry_id: id });
 
