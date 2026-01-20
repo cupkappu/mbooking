@@ -22,21 +22,35 @@ class ApiClient {
     }
 
     try {
-      const nextAuthToken = localStorage.getItem('next-auth.session-token');
+      // First try to get from localStorage (set by SessionSync)
       const accessToken = localStorage.getItem('accessToken');
-
       if (accessToken) {
         return `Bearer ${accessToken}`;
       }
 
-      const session = await getSession();
-      if (session?.accessToken) {
-        return `Bearer ${session.accessToken}`;
+      // Fallback: fetch session directly from NextAuth API
+      // This is more reliable than getSession() hook
+      const response = await fetch('/api/auth/session', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.ok) {
+        const session = await response.json();
+        if (session?.accessToken) {
+          // Cache it for future use
+          try {
+            localStorage.setItem('accessToken', session.accessToken);
+          } catch (e) {
+            // Silently handle
+          }
+          return `Bearer ${session.accessToken}`;
+        }
       }
     } catch (error) {
       // Silently handle errors
     }
-    
+
     return undefined;
   }
 
