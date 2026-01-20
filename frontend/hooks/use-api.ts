@@ -4,22 +4,23 @@ import { apiClient } from '@/lib/api';
 import type { Account, JournalEntry, AccountBalance } from '@/types';
 
 export function useAccounts() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
 
   return useQuery({
     queryKey: ['accounts'],
     queryFn: () => apiClient.get<Account[]>('/accounts/tree'),
-    enabled: !!session,
+    // Only fetch when session is loaded AND has accessToken
+    enabled: status === 'authenticated' && !!session?.accessToken,
   });
 }
 
 export function useAccount(id: string) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
 
   return useQuery({
     queryKey: ['accounts', id],
     queryFn: () => apiClient.get<Account>(`/accounts/${id}`),
-    enabled: !!id && !!session,
+    enabled: !!id && status === 'authenticated' && !!session?.accessToken,
   });
 }
 
@@ -48,7 +49,7 @@ export function useUpdateAccount() {
 }
 
 export function useJournalEntries(options?: { offset?: number; limit?: number }) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
 
   return useQuery({
     queryKey: ['journal-entries', options],
@@ -56,7 +57,7 @@ export function useJournalEntries(options?: { offset?: number; limit?: number })
       apiClient.get<{ entries: JournalEntry[] }>(
         `/journal?offset=${options?.offset || 0}&limit=${options?.limit || 50}`
       ),
-    enabled: !!session,
+    enabled: status === 'authenticated' && !!session?.accessToken,
   });
 }
 
@@ -82,13 +83,13 @@ export function useBalances(query: {
   date_range?: { from: string; to: string };
   include_subtree?: boolean;
 }) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
 
   return useQuery({
     queryKey: ['balances', query],
     queryFn: () =>
       apiClient.post<{ balances: AccountBalance[] }>('/query/balances', query),
-    enabled: !!session,
+    enabled: status === 'authenticated' && !!session?.accessToken,
   });
 }
 
@@ -105,12 +106,13 @@ export interface DashboardSummary {
 }
 
 export function useDashboardSummary() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
 
   return useQuery({
     queryKey: ['dashboard-summary'],
     queryFn: () => apiClient.get<DashboardSummary>('/query/summary'),
-    enabled: !!session,
+    // Only fetch when session is loaded AND has accessToken
+    enabled: status === 'authenticated' && !!session?.accessToken,
     staleTime: 30 * 1000, // Cache for 30 seconds
   });
 }

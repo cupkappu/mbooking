@@ -22,9 +22,11 @@ class ApiClient {
     }
 
     try {
-      const token = localStorage.getItem('accessToken');
-      if (token) {
-        return `Bearer ${token}`;
+      const nextAuthToken = localStorage.getItem('next-auth.session-token');
+      const accessToken = localStorage.getItem('accessToken');
+
+      if (accessToken) {
+        return `Bearer ${accessToken}`;
       }
 
       const session = await getSession();
@@ -62,7 +64,13 @@ class ApiClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: 'Request failed' }));
-      throw new Error(error.message || 'Request failed');
+      
+      // 如果是 401 错误，提供更清晰的错误信息
+      if (response.status === 401) {
+        throw new Error('Authentication required. Please log in again.');
+      }
+      
+      throw new Error(error.message || `Request failed with status ${response.status}`);
     }
 
     const data = await response.json();
