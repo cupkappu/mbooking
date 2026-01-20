@@ -1,5 +1,8 @@
 'use client';
 
+// Force dynamic rendering to avoid SSR pre-rendering issues with hooks
+export const dynamic = 'force-dynamic';
+
 import { useState, useMemo, useEffect } from 'react';
 import { useAccounts, useCreateAccount, useDeleteAccount, useUpdateAccount, useBalances } from '@/hooks/use-api';
 import { useCurrencies } from '@/hooks/use-currencies';

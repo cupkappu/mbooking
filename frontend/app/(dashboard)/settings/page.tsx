@@ -1,5 +1,8 @@
 'use client';
 
+// Force dynamic rendering to avoid SSR pre-rendering issues with hooks
+export const dynamic = 'force-dynamic';
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
