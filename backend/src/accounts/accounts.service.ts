@@ -3,12 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, TreeRepository } from 'typeorm';
 import { Account, AccountType } from './account.entity';
 import { TenantContext } from '../common/context/tenant.context';
+import { CurrenciesService } from '../currencies/currencies.service';
 
 @Injectable()
 export class AccountsService {
   constructor(
     @InjectRepository(Account)
     private accountRepository: TreeRepository<Account>,
+    private currenciesService: CurrenciesService,
   ) {}
 
   private getTenantId(): string {
@@ -64,6 +66,10 @@ export class AccountsService {
     const tenantId = this.getTenantId();
     const parentId = (data as any).parent_id === '' ? null : (data as any).parent_id;
 
+    if (data.currency) {
+      await this.currenciesService.validateCurrencyExists(data.currency);
+    }
+
     let path = data.name || '';
     let depth = 0;
     let parent: Account | null = null;
@@ -99,6 +105,10 @@ export class AccountsService {
   async update(id: string, data: Partial<Account>): Promise<Account> {
     const tenantId = this.getTenantId();
     const account = await this.findById(id);
+
+    if (data.currency) {
+      await this.currenciesService.validateCurrencyExists(data.currency);
+    }
     
     if (data.name && data.name !== account.name) {
       const parentId = (account as any).parentIdId;
