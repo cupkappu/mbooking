@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -98,5 +99,17 @@ export class CurrenciesService {
         await this.create(currency);
       }
     }
+  }
+
+  async validateCurrencyExists(code: string): Promise<Currency> {
+    const currency = await this.currencyRepository.findOne({
+      where: { code },
+    });
+    if (!currency || !currency.is_active) {
+      throw new BadRequestException(
+        `Currency '${code}' is not available. Contact your administrator.`
+      );
+    }
+    return currency;
   }
 }
