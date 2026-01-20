@@ -248,6 +248,7 @@ export default function AdminCurrenciesPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          data-testid="delete-currency"
                           onClick={() => openDeleteDialog(currency)}
                           className="text-destructive hover:text-destructive"
                         >
