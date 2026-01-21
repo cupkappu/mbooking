@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Param,
   UseGuards,
 } from '@nestjs/common';
@@ -13,6 +14,8 @@ import {
 } from '@nestjs/swagger';
 import { CurrenciesService } from './currencies.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentTenant } from '../common/decorators/tenant.decorator';
+import { CurrentUser } from '../common/decorators/tenant.decorator';
 
 @ApiTags('currencies')
 @Controller('currencies')
@@ -34,5 +37,17 @@ export class CurrenciesController {
   @ApiNotFoundResponse({ description: 'Currency not found' })
   async findOne(@Param('code') code: string) {
     return this.currenciesService.findByCode(code);
+  }
+
+  @Post(':code/set-default')
+  @ApiOperation({ summary: 'Set default currency for tenant' })
+  @ApiResponse({ status: 200, description: 'Currency set as default' })
+  @ApiNotFoundResponse({ description: 'Currency not found' })
+  async setDefault(
+    @Param('code') code: string,
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() userId: string,
+  ) {
+    return this.currenciesService.setDefault(code, tenantId, userId);
   }
 }

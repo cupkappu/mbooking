@@ -77,6 +77,14 @@ export function useDeleteJournalEntry() {
   });
 }
 
+export function useUpdateJournalEntry() {
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      apiClient.put<JournalEntry>(`/journal/${id}`, data),
+    onSuccess: () => {},
+  });
+}
+
 export function useBalances(query: {
   depth?: number;
   convert_to?: string;
@@ -94,14 +102,18 @@ export function useBalances(query: {
 }
 
 export interface DashboardSummary {
-  assets: number;
-  liabilities: number;
-  netWorth: number;
+  /** 按货币分别显示的资产余额，如 { HKD: 1000, USD: 50 } */
+  assets: { [currency: string]: number } | null;
+  /** 按货币分别显示的负债余额 */
+  liabilities: { [currency: string]: number } | null;
+  /** 换算为单一货币后的净资产 */
+  netWorth: number | null;
   recentTransactions: {
     id: string;
     date: string;
     description: string;
-    amount: number;
+    amount: number | null;
+    currency: string;
   }[];
 }
 

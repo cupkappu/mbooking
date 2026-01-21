@@ -2,10 +2,32 @@
 
 import { useDashboardSummary } from '@/hooks/use-api';
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
+function formatCurrency(amount: number | undefined | null, currency: string = 'USD'): string {
+  // Handle undefined, null, or NaN
+  if (amount === undefined || amount === null || Number.isNaN(amount)) {
+    return '-';
+  }
+  const currencyLocales: { [key: string]: string } = {
+    USD: 'en-US',
+    HKD: 'en-HK',
+    CNY: 'zh-CN',
+    EUR: 'de-DE',
+    GBP: 'en-GB',
+    JPY: 'ja-JP',
+  };
+  const locale = currencyLocales[currency] || 'en-US';
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'USD',
+    currency: currency,
+    minimumFractionDigits: currency === 'JPY' ? 0 : 2,
+    maximumFractionDigits: currency === 'JPY' ? 0 : 2,
+  }).format(amount);
+}
+
+function formatNumber(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 
@@ -18,13 +40,40 @@ function LoadingCard({ label }: { label: string }) {
   );
 }
 
+/** 显示按货币分别的余额，如 "1,000.00 HKD" */
+function MultiCurrencyAmount({ amounts }: { amounts: { [currency: string]: number } | undefined | null }) {
+  if (!amounts || Object.keys(amounts).length === 0) {
+    return <span className="text-muted-foreground">-</span>;
+  }
+
+  const parts = Object.entries(amounts)
+    .filter(([, amount]) => amount !== undefined && amount !== null && !Number.isNaN(amount) && Math.abs(amount) > 0.001)
+    .map(([currency, amount]) => formatCurrency(amount, currency));
+
+  if (parts.length === 0) {
+    return <span className="text-muted-foreground">-</span>;
+  }
+
+  return (
+    <div className="flex flex-col">
+      {parts.map((part, index) => (
+        <span key={index} className="font-mono text-lg">
+          {part}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function SummaryCard({
   label,
-  amount,
+  amounts,
+  convertedAmount,
   isLoading,
 }: {
   label: string;
-  amount?: number;
+  amounts: { [currency: string]: number } | undefined | null;
+  convertedAmount?: number | undefined | null;
   isLoading: boolean;
 }) {
   return (
@@ -33,7 +82,14 @@ function SummaryCard({
       {isLoading ? (
         <div className="h-8 bg-muted animate-pulse rounded mt-2" />
       ) : (
-        <p className="text-2xl font-bold">{formatCurrency(amount ?? 0)}</p>
+        <div className="mt-1">
+          <MultiCurrencyAmount amounts={amounts} />
+          {convertedAmount !== undefined && convertedAmount !== null && !Number.isNaN(convertedAmount) && (
+            <p className="text-xl font-bold mt-1">
+              = {formatCurrency(convertedAmount)}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
@@ -46,7 +102,8 @@ function TransactionItem({
     id: string;
     date: string;
     description: string;
-    amount: number;
+    amount: number | undefined | null;
+    currency?: string;
   };
 }) {
   return (
@@ -57,10 +114,10 @@ function TransactionItem({
       </div>
       <span
         className={`font-medium ${
-          transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'
+          (transaction.amount ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
         }`}
       >
-        {formatCurrency(transaction.amount)}
+        {formatCurrency(transaction.amount, transaction.currency || 'USD')}
       </span>
     </div>
   );
@@ -93,17 +150,20 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <SummaryCard
           label="Total Assets"
-          amount={summary?.assets}
+          amounts={summary?.assets}
+          convertedAmount={undefined}
           isLoading={isLoading}
         />
         <SummaryCard
           label="Total Liabilities"
-          amount={summary?.liabilities}
+          amounts={summary?.liabilities}
+          convertedAmount={undefined}
           isLoading={isLoading}
         />
         <SummaryCard
-          label="Net Worth"
-          amount={summary?.netWorth}
+          label="Net Worth (USD)"
+          amounts={undefined}
+          convertedAmount={summary?.netWorth}
           isLoading={isLoading}
         />
       </div>

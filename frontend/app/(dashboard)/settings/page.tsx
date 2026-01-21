@@ -23,7 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import { Pencil, Trash2, Check, X } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import { useToast } from '@/hooks/use-toast';
@@ -32,15 +32,10 @@ import { tenantsApi } from '@/lib/tenants';
 import type { Currency } from '@/types/currency';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'general' | 'currencies' | 'providers'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'currencies'>('general');
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingCurrency, setEditingCurrency] = useState<string | null>(null);
-  const [newCurrency, setNewCurrency] = useState({
-    code: '',
-    name: '',
-    symbol: '',
-  });
   const [editForm, setEditForm] = useState({
     name: '',
     symbol: '',
@@ -103,37 +98,25 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
-    if ((activeTab === 'currencies' || activeTab === 'general') && currencies.length === 0) {
+    if (activeTab === 'currencies' && currencies.length === 0) {
       fetchCurrencies();
     }
   }, [activeTab, currencies.length]);
 
-  const handleAddCurrency = async () => {
-    if (!newCurrency.code || !newCurrency.name || !newCurrency.symbol) return;
-    
-    try {
-      await currenciesApi.create(newCurrency);
-      setNewCurrency({ code: '', name: '', symbol: '' });
-      await fetchCurrencies();
-    } catch (error) {
-      console.error('Failed to add currency:', error);
-    }
-  };
-
-  const handleDeleteCurrency = async (id: string) => {
+  const handleDeleteCurrency = async (code: string) => {
     if (!confirm('Are you sure you want to delete this currency?')) return;
     
     try {
-      await currenciesApi.delete(id);
+      await currenciesApi.delete(code);
       await fetchCurrencies();
     } catch (error) {
       console.error('Failed to delete currency:', error);
     }
   };
 
-  const handleSetDefault = async (id: string) => {
+  const handleSetDefault = async (code: string) => {
     try {
-      await currenciesApi.setDefault(id);
+      await currenciesApi.setDefault(code);
       await fetchCurrencies();
     } catch (error) {
       console.error('Failed to set default currency:', error);
@@ -141,7 +124,7 @@ export default function SettingsPage() {
   };
 
   const startEditing = (currency: Currency) => {
-    setEditingCurrency(currency.id);
+    setEditingCurrency(currency.code);
     setEditForm({
       name: currency.name,
       symbol: currency.symbol,
@@ -155,9 +138,9 @@ export default function SettingsPage() {
     setEditForm({ name: '', symbol: '', is_active: true, is_default: false });
   };
 
-  const saveEdit = async (id: string) => {
+  const saveEdit = async (code: string) => {
     try {
-      await currenciesApi.update(id, editForm);
+      await currenciesApi.update(code, editForm);
       cancelEditing();
       await fetchCurrencies();
     } catch (error) {
@@ -168,7 +151,6 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'general', label: 'General' },
     { id: 'currencies', label: 'Currencies' },
-    { id: 'providers', label: 'Rate Providers' },
   ];
 
   return (
@@ -203,13 +185,13 @@ export default function SettingsPage() {
            <CardContent className="space-y-4">
              <div className="space-y-2">
                <Label htmlFor="default-currency">Default Currency</Label>
-               <Select value={defaultCurrency} onValueChange={setDefaultCurrency}>
-                 <SelectTrigger id="default-currency">
-                   <SelectValue placeholder="Select currency" />
-                 </SelectTrigger>
-                 <SelectContent>
-                   {currencies.map((currency) => (
-                     <SelectItem key={currency.id} value={currency.code}>
+                <Select value={defaultCurrency} onValueChange={setDefaultCurrency}>
+                  <SelectTrigger id="default-currency">
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map((currency) => (
+                      <SelectItem key={currency.code} value={currency.code}>
                        {currency.code} - {currency.name}
                      </SelectItem>
                    ))}
@@ -251,50 +233,6 @@ export default function SettingsPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Add New Currency</CardTitle>
-              <CardDescription>Add a new currency to your account</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="currency-code">Code</Label>
-                  <Input
-                    id="currency-code"
-                    placeholder="USD"
-                    value={newCurrency.code}
-                    onChange={(e) => setNewCurrency({ ...newCurrency, code: e.target.value.toUpperCase() })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="currency-name">Name</Label>
-                  <Input
-                    id="currency-name"
-                    placeholder="US Dollar"
-                    value={newCurrency.name}
-                    onChange={(e) => setNewCurrency({ ...newCurrency, name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="currency-symbol">Symbol</Label>
-                  <Input
-                    id="currency-symbol"
-                    placeholder="$"
-                    value={newCurrency.symbol}
-                    onChange={(e) => setNewCurrency({ ...newCurrency, symbol: e.target.value })}
-                  />
-                </div>
-                <div className="flex items-end">
-                  <Button onClick={handleAddCurrency} disabled={!newCurrency.code || !newCurrency.name || !newCurrency.symbol}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Currency
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle>Currency Management</CardTitle>
               <CardDescription>View and manage your currencies</CardDescription>
             </CardHeader>
@@ -312,8 +250,8 @@ export default function SettingsPage() {
                 </TableHeader>
                 <TableBody>
                   {currencies.map((currency) => (
-                    <TableRow key={currency.id}>
-                      {editingCurrency === currency.id ? (
+                    <TableRow key={currency.code}>
+                      {editingCurrency === currency.code ? (
                         <>
                           <TableCell className="font-medium">{currency.code}</TableCell>
                           <TableCell>
@@ -352,7 +290,7 @@ export default function SettingsPage() {
                             </Button>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => saveEdit(currency.id)}>
+                            <Button variant="ghost" size="sm" onClick={() => saveEdit(currency.code)}>
                               <Check className="w-4 h-4" />
                             </Button>
                             <Button variant="ghost" size="sm" onClick={cancelEditing}>
@@ -381,15 +319,12 @@ export default function SettingsPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             {!currency.is_default && (
-                              <Button variant="ghost" size="sm" onClick={() => handleSetDefault(currency.id)}>
+                              <Button variant="ghost" size="sm" onClick={() => handleSetDefault(currency.code)}>
                                 Set Default
                               </Button>
                             )}
                             <Button variant="ghost" size="sm" onClick={() => startEditing(currency)}>
                               <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteCurrency(currency.id)}>
-                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </TableCell>
                         </>
@@ -400,39 +335,12 @@ export default function SettingsPage() {
               </Table>
               {currencies.length === 0 && (
                 <p className="text-center text-muted-foreground py-8">
-                  No currencies found. Add a currency above to get started.
+                  No currencies found.
                 </p>
               )}
             </CardContent>
           </Card>
         </div>
-      )}
-
-      {activeTab === 'providers' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Rate Providers</CardTitle>
-            <CardDescription>Configure exchange rate providers for currency conversion</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="p-4 border rounded-lg">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="font-medium">Default Provider</h3>
-                    <p className="text-sm text-muted-foreground">Built-in exchange rate data</p>
-                  </div>
-                  <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">Active</span>
-                </div>
-              </div>
-
-              <Button variant="outline" className="w-full border-dashed">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Rate Provider
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       )}
     </div>
   );

@@ -4,7 +4,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState } from 'react';
-import { useJournalEntries, useAccounts, useCreateJournalEntry, useDeleteJournalEntry } from '@/hooks/use-api';
+import { useJournalEntries, useAccounts, useCreateJournalEntry, useUpdateJournalEntry, useDeleteJournalEntry } from '@/hooks/use-api';
 import { useCurrencies } from '@/hooks/use-currencies';
 import type { JournalEntry, Account } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,7 @@ export default function JournalPage() {
   const { data: accounts } = useAccounts();
   const { data: currencies } = useCurrencies();
   const createEntry = useCreateJournalEntry();
+  const updateEntry = useUpdateJournalEntry();
   const deleteEntry = useDeleteJournalEntry();
 
   const [showForm, setShowForm] = useState(false);
@@ -67,15 +68,26 @@ export default function JournalPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const filteredLines = formData.lines.filter((line) => line.account_id && line.amount !== 0);
-    
-    await createEntry.mutateAsync({
-      date: formData.date,
-      description: formData.description,
-      lines: filteredLines,
-    });
-    
+
+    if (editingEntry) {
+      await updateEntry.mutateAsync({
+        id: editingEntry.id,
+        data: {
+          date: formData.date,
+          description: formData.description,
+          lines: filteredLines,
+        },
+      });
+    } else {
+      await createEntry.mutateAsync({
+        date: formData.date,
+        description: formData.description,
+        lines: filteredLines,
+      });
+    }
+
     setShowForm(false);
     setEditingEntry(null);
     setFormData({
@@ -280,9 +292,9 @@ export default function JournalPage() {
               <div className="flex gap-2 pt-2">
                 <Button
                   type="submit"
-                  disabled={createEntry.isPending || calculateTotal(formData.lines) !== 0}
+                  disabled={createEntry.isPending || updateEntry.isPending || calculateTotal(formData.lines) !== 0}
                 >
-                  {createEntry.isPending ? 'Saving...' : (editingEntry ? 'Update Entry' : 'Create Entry')}
+                  {createEntry.isPending || updateEntry.isPending ? 'Saving...' : (editingEntry ? 'Update Entry' : 'Create Entry')}
                 </Button>
                 <Button
                   type="button"
@@ -353,7 +365,26 @@ export default function JournalPage() {
                           : 'text-green-600 font-medium'
                       }>
                         {parseFloat(String(line.amount)) < 0 ? '-' : '+'}
-                        ${Math.abs(parseFloat(String(line.amount))).toFixed(2)} {line.currency}
+                        {(() => {
+                          const absAmount = Math.abs(parseFloat(String(line.amount)));
+                          // Use formatCurrency for proper currency symbol
+                          const currency = line.currency || 'USD';
+                          const currencyLocales: { [key: string]: string } = {
+                            USD: 'en-US',
+                            HKD: 'en-HK',
+                            CNY: 'zh-CN',
+                            EUR: 'de-DE',
+                            GBP: 'en-GB',
+                            JPY: 'ja-JP',
+                          };
+                          const locale = currencyLocales[currency] || 'en-US';
+                          return new Intl.NumberFormat(locale, {
+                            style: 'currency',
+                            currency: currency,
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          }).format(absAmount);
+                        })()}
                       </span>
                     </div>
                   ))}

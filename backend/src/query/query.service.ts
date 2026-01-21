@@ -51,14 +51,18 @@ export interface AccountBalance {
 }
 
 export interface DashboardSummary {
-  assets: number;
-  liabilities: number;
+  /** 按货币分别显示的资产余额，如 "1000 HKD + 50 USD" */
+  assets: { [currency: string]: number };
+  /** 按货币分别显示的负债余额 */
+  liabilities: { [currency: string]: number };
+  /** 换算为单一货币后的净资产（使用系统默认货币） */
   netWorth: number;
   recentTransactions: {
     id: string;
     date: string;
     description: string;
     amount: number;
+    currency: string;
   }[];
 }
 
@@ -225,20 +229,44 @@ export class QueryService {
       where: { tenant_id: tenantId, is_active: true },
     });
 
-    // Calculate total assets
+    // Calculate total assets per currency (NOT mixing currencies)
     const assetAccounts = accounts.filter(a => a.type === 'assets');
-    let totalAssets = 0;
+    const assetsByCurrency: { [currency: string]: number } = {};
     for (const account of assetAccounts) {
       const balances = await this.calculateAccountBalance(account.id, tenantId);
-      totalAssets += balances.reduce((sum, b) => sum + b.amount, 0);
+      for (const balance of balances) {
+        assetsByCurrency[balance.currency] = (assetsByCurrency[balance.currency] || 0) + balance.amount;
+      }
     }
 
-    // Calculate total liabilities
+    // Calculate total liabilities per currency (NOT mixing currencies)
     const liabilityAccounts = accounts.filter(a => a.type === 'liabilities');
-    let totalLiabilities = 0;
+    const liabilitiesByCurrency: { [currency: string]: number } = {};
     for (const account of liabilityAccounts) {
       const balances = await this.calculateAccountBalance(account.id, tenantId);
-      totalLiabilities += balances.reduce((sum, b) => sum + b.amount, 0);
+      for (const balance of balances) {
+        liabilitiesByCurrency[balance.currency] = (liabilitiesByCurrency[balance.currency] || 0) + balance.amount;
+      }
+    }
+
+    // Calculate net worth in a single currency (using USD as default, or first available)
+    const allCurrencies = Object.keys({ ...assetsByCurrency, ...liabilitiesByCurrency });
+    let netWorth = 0;
+    const defaultCurrency = 'USD';
+
+    for (const currency of allCurrencies) {
+      const assets = assetsByCurrency[currency] || 0;
+      const liabilities = liabilitiesByCurrency[currency] || 0;
+      const balance = assets - liabilities;
+
+      if (currency === defaultCurrency) {
+        netWorth += balance;
+      } else {
+        const rate = await this.rateEngine.getRate(currency, defaultCurrency, {});
+        if (rate) {
+          netWorth += balance * rate.rate;
+        }
+      }
     }
 
     // Get recent transactions
@@ -250,20 +278,23 @@ export class QueryService {
     });
 
     const recentTransactions = recentEntries.map(entry => {
-      // Calculate net amount for the entry
-      const netAmount = entry.lines.reduce((sum, line) => sum + (line.amount > 0 ? line.converted_amount : 0), 0);
+      // Calculate net amount for the entry (sum of positive amounts in converted currency)
+      const netAmount = entry.lines.reduce((sum, line) => sum + (line.amount > 0 ? line.converted_amount || line.amount : 0), 0);
+      // Get the primary currency of this entry (use first line's currency)
+      const primaryCurrency = entry.lines?.[0]?.currency || 'USD';
       return {
         id: entry.id,
         date: typeof entry.date === 'string' ? entry.date : entry.date.toISOString().split('T')[0],
         description: entry.description,
-        amount: netAmount,
+        amount: Math.round(netAmount * 100) / 100,
+        currency: primaryCurrency,
       };
     });
 
     return {
-      assets: Math.round(totalAssets * 100) / 100,
-      liabilities: Math.round(totalLiabilities * 100) / 100,
-      netWorth: Math.round((totalAssets - totalLiabilities) * 100) / 100,
+      assets: assetsByCurrency,
+      liabilities: liabilitiesByCurrency,
+      netWorth: Math.round(netWorth * 100) / 100,
       recentTransactions,
     };
   }
@@ -271,14 +302,15 @@ export class QueryService {
   async calculateSubtreeBalance(accountId: string, dateRange?: { from: string; to: string }): Promise<CurrencyBalance[]> {
     const tenantId = TenantContext.requireTenantId();
     const accountIds = await this.getDescendantIds(accountId);
-    
+    // accountIds already includes the accountId itself (see getDescendantIds implementation)
+
     const allBalances: CurrencyBalance[] = [];
-    
+
     for (const id of accountIds) {
       const accountBalance = await this.calculateAccountBalance(id, tenantId, dateRange);
       allBalances.push(...accountBalance);
     }
-    
+
     return this.mergeCurrencies(allBalances);
   }
 
@@ -379,8 +411,21 @@ export class QueryService {
       // Use parent's own currencies, NOT merged from all children
       const mergedCurrencies = parentBalance?.currencies || [];
 
-      // Merge subtree_currencies if any account has them (parent's subtree includes all descendants)
-      const allSubtreeCurrencies = group.flatMap((b) => b.subtree_currencies || []);
+      // Merge subtree_currencies: parent owns + all children's subtree (total of all descendants)
+      const allSubtreeCurrencies: CurrencyBalance[] = [];
+
+      // Add parent's own currencies to subtree
+      if (parentBalance?.currencies) {
+        allSubtreeCurrencies.push(...parentBalance.currencies);
+      }
+
+      // Add all children's subtree_currencies (which already includes their descendants)
+      for (const b of group) {
+        if (b.subtree_currencies && b.account.path !== key) {
+          allSubtreeCurrencies.push(...b.subtree_currencies);
+        }
+      }
+
       const mergedSubtreeCurrencies = allSubtreeCurrencies.length > 0
         ? this.mergeCurrencies(allSubtreeCurrencies)
         : undefined;

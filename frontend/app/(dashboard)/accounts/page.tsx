@@ -395,7 +395,7 @@ export default function AccountsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {availableCurrencies.map((currency: Currency) => (
-                    <SelectItem key={currency.id} value={currency.code}>
+                    <SelectItem key={currency.code} value={currency.code}>
                       {currency.code}
                     </SelectItem>
                   ))}
