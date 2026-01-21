@@ -166,13 +166,17 @@ export class QueryService {
         }
 
         if (query.convert_to) {
+          // Keep original currencies, add converted_amount
+          result.currencies = currencyBalances;
           const converted = await this.convertBalances(
             currencyBalances,
             query.convert_to,
             query.exchange_rate_date,
             query.specific_date,
           );
-          result.currencies = converted;
+          result.converted_amount = converted[0]?.amount || 0;
+        } else {
+          result.currencies = currencyBalances;
         }
 
         return result;

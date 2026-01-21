@@ -7,6 +7,7 @@ import { JournalEntry } from '../journal/journal-entry.entity';
 import { JournalLine } from '../journal/journal-line.entity';
 import { RateEngine } from '../rates/rate.engine';
 import { TenantContext } from '../common/context/tenant.context';
+import { TenantsService } from '../tenants/tenants.service';
 
 describe('QueryService', () => {
   let service: QueryService;
@@ -73,6 +74,12 @@ describe('QueryService', () => {
           provide: RateEngine,
           useValue: {
             getRate: jest.fn(),
+          },
+        },
+        {
+          provide: TenantsService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({ settings: { default_currency: 'USD' } }),
           },
         },
       ],
