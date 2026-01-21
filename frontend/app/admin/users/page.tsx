@@ -4,6 +4,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Card,
   CardContent,
@@ -65,6 +66,7 @@ export default function AdminUsersPage() {
   const disableUser = useDisableAdminUser();
   const resetPassword = useResetUserPassword();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const handleCreateUser = async () => {
     try {
@@ -78,7 +80,9 @@ export default function AdminUsersPage() {
       toast({ title: 'User created successfully' });
       setShowCreateDialog(false);
       setCreateForm({ email: '', name: '', password: '', role: 'user' });
-      refetch();
+      
+      // Invalidate cache to trigger refetch
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     }
@@ -100,7 +104,9 @@ export default function AdminUsersPage() {
       
       toast({ title: 'User updated successfully' });
       setShowEditDialog(false);
-      refetch();
+      
+      // Invalidate cache to trigger refetch
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     }
@@ -110,7 +116,9 @@ export default function AdminUsersPage() {
     try {
       await disableUser.mutateAsync(id);
       toast({ title: 'User disabled successfully' });
-      refetch();
+      
+      // Invalidate cache to trigger refetch
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     }

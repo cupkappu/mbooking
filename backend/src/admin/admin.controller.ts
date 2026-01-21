@@ -38,11 +38,15 @@ export class AdminController {
   @Get('users')
   async listUsers(
     @Req() req: RequestWithIp,
-    @Query('offset') offset?: number,
-    @Query('limit') limit?: number,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
   ) {
-    const tenantId = (req as any).user?.tenant_id || 'system';
-    const result = await this.adminService.listUsers(tenantId, { offset, limit });
+    // JWT strategy returns tenantId/userId (camelCase), not tenant_id/id (snake_case)
+    const tenantId = (req as any).user?.tenantId || 'system';
+    // 确保参数是数字类型
+    const parsedOffset = offset ? parseInt(offset, 10) : 0;
+    const parsedLimit = limit ? parseInt(limit, 10) : 20;
+    const result = await this.adminService.listUsers(tenantId, { offset: parsedOffset, limit: parsedLimit });
     return { success: true, data: result };
   }
 
