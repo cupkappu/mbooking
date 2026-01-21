@@ -147,7 +147,15 @@ export function useAdminProviders(options?: { offset?: number; limit?: number })
 
 export function useCreateProvider() {
   return useMutation({
-    mutationFn: (data: { name: string; type: string; config: any }) =>
+    mutationFn: (data: {
+      name: string;
+      type: string;
+      config: any;
+      is_active?: boolean;
+      record_history?: boolean;
+      supports_historical?: boolean;
+      supported_currencies?: string[];
+    }) =>
       apiClient.post<Provider>('/admin/providers', data),
   });
 }
@@ -284,5 +292,18 @@ export function useSchedulerHistory() {
   return useQuery({
     queryKey: ['admin-scheduler-history'],
     queryFn: () => apiClient.get<any[]>('/admin/scheduler/history'),
+  });
+}
+
+// Simplified hook for getting available plugin files for provider creation
+export function useAvailablePlugins() {
+  return useQuery({
+    queryKey: ['admin-plugins-list'],
+    queryFn: async () => {
+      const response = await apiClient.get<{ plugins: Plugin[] }>('/admin/plugins');
+      return response.plugins
+        .filter(p => p.status === 'loaded' || p.status === 'unloaded')
+        .map(p => ({ name: p.name, file_path: p.file_path }));
+    },
   });
 }

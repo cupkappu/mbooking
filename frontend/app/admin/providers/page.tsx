@@ -3,11 +3,12 @@
 // Force dynamic rendering to avoid SSR pre-rendering issues
 export const dynamic = 'force-dynamic';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -32,8 +33,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useAdminProviders, useCreateProvider, useUpdateProvider, useToggleProvider, useTestProvider, Provider } from '@/hooks/use-admin';
-import { Plus, Search, RefreshCw, Play, Power, CheckCircle, XCircle } from 'lucide-react';
+import { useAdminProviders, useCreateProvider, useUpdateProvider, useToggleProvider, useTestProvider, useAvailablePlugins, Provider } from '@/hooks/use-admin';
+import { Plus, Search, RefreshCw, Play, Power, CheckCircle, XCircle, FileCode, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function AdminProvidersPage() {
@@ -42,7 +43,19 @@ export default function AdminProvidersPage() {
   
   // Create form state
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', type: 'rest_api', config: '{}' });
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    type: 'rest_api' as 'rest_api' | 'js_plugin',
+    // REST API fields
+    base_url: 'https://api.frankfurter.app',
+    api_key: '',
+    // JS Plugin fields
+    selected_plugin_file: '',
+    // Common fields
+    record_history: true,
+    supports_historical: true,
+  });
+  const [supportedCurrencies, setSupportedCurrencies] = useState('USD, EUR, GBP, JPY, CNY, HKD');
   
   // Edit form state
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -55,27 +68,50 @@ export default function AdminProvidersPage() {
   const updateProvider = useUpdateProvider();
   const toggleProvider = useToggleProvider();
   const testProvider = useTestProvider();
+  const { data: availablePlugins } = useAvailablePlugins();
   const { toast } = useToast();
 
   const handleCreateProvider = async () => {
     try {
+      // Build config based on provider type
       let config: any = {};
-      try {
-        config = JSON.parse(createForm.config);
-      } catch {
-        // If not valid JSON, use as base_url
-        config = { base_url: createForm.config };
+      if (createForm.type === 'rest_api') {
+        config = {
+          base_url: createForm.base_url,
+          ...(createForm.api_key && { api_key: createForm.api_key }),
+        };
+      } else {
+        config = { file_path: createForm.selected_plugin_file };
       }
-      
+
+      // Parse supported currencies
+      const currencies = supportedCurrencies
+        .split(',')
+        .map(c => c.trim().toUpperCase())
+        .filter(c => c.length > 0);
+
       await createProvider.mutateAsync({
         name: createForm.name,
         type: createForm.type,
         config,
+        is_active: true,
+        record_history: createForm.record_history,
+        supports_historical: createForm.supports_historical,
+        supported_currencies: currencies,
       });
-      
+
       toast({ title: 'Provider created successfully' });
       setShowCreateDialog(false);
-      setCreateForm({ name: '', type: 'rest_api', config: '{}' });
+      setCreateForm({
+        name: '',
+        type: 'rest_api',
+        base_url: 'https://api.frankfurter.app',
+        api_key: '',
+        selected_plugin_file: '',
+        record_history: true,
+        supports_historical: true,
+      });
+      setSupportedCurrencies('USD, EUR, GBP, JPY, CNY, HKD');
       refetch();
     } catch (error: any) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
@@ -289,11 +325,18 @@ export default function AdminProvidersPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} />
+              <Input
+                value={createForm.name}
+                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                placeholder="My Rate Provider"
+              />
             </div>
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select value={createForm.type} onValueChange={(value) => setCreateForm({ ...createForm, type: value })}>
+              <Select
+                value={createForm.type}
+                onValueChange={(value: 'rest_api' | 'js_plugin') => setCreateForm({ ...createForm, type: value })}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="rest_api">REST API</SelectItem>
@@ -301,21 +344,98 @@ export default function AdminProvidersPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* REST API Fields */}
+            {createForm.type === 'rest_api' && (
+              <>
+                <div className="space-y-2">
+                  <Label>Base URL</Label>
+                  <Input
+                    value={createForm.base_url}
+                    onChange={(e) => setCreateForm({ ...createForm, base_url: e.target.value })}
+                    placeholder="https://api.example.com"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The base URL for the rate API (e.g., https://api.frankfurter.app)
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>API Key (optional)</Label>
+                  <Input
+                    type="password"
+                    value={createForm.api_key}
+                    onChange={(e) => setCreateForm({ ...createForm, api_key: e.target.value })}
+                    placeholder="Enter API key if required"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* JS Plugin Fields */}
+            {createForm.type === 'js_plugin' && (
+              <div className="space-y-2">
+                <Label>Plugin</Label>
+                <Select
+                  value={createForm.selected_plugin_file}
+                  onValueChange={(value) => setCreateForm({ ...createForm, selected_plugin_file: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a plugin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availablePlugins?.map((plugin) => (
+                      <SelectItem key={plugin.file_path} value={plugin.file_path}>
+                        <div className="flex items-center gap-2">
+                          <FileCode className="h-4 w-4" />
+                          {plugin.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Select a JavaScript plugin file from the plugins directory
+                </p>
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label>Config (JSON)</Label>
-              <Input 
-                value={createForm.config} 
-                onChange={(e) => setCreateForm({ ...createForm, config: e.target.value })}
-                placeholder='{"base_url": "https://api.example.com"}'
+              <Label>Supported Currencies</Label>
+              <Input
+                value={supportedCurrencies}
+                onChange={(e) => setSupportedCurrencies(e.target.value)}
+                placeholder="USD, EUR, GBP, JPY"
               />
               <p className="text-xs text-muted-foreground">
-                For REST API: {"{"}base_url, api_key, headers{"}"}
+                Comma-separated list of currency codes (e.g., USD, EUR, GBP, JPY, CNY, HKD)
               </p>
+            </div>
+
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="record-history"
+                  checked={createForm.record_history}
+                  onCheckedChange={(checked) => setCreateForm({ ...createForm, record_history: checked })}
+                />
+                <Label htmlFor="record-history">Record History</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="supports-historical"
+                  checked={createForm.supports_historical}
+                  onCheckedChange={(checked) => setCreateForm({ ...createForm, supports_historical: checked })}
+                />
+                <Label htmlFor="supports-historical">Historical Rates</Label>
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancel</Button>
-            <Button onClick={handleCreateProvider} disabled={!createForm.name || createProvider.isPending}>
+            <Button
+              onClick={handleCreateProvider}
+              disabled={!createForm.name || createProvider.isPending || (createForm.type === 'js_plugin' && !createForm.selected_plugin_file)}
+            >
               {createProvider.isPending ? 'Creating...' : 'Create Provider'}
             </Button>
           </DialogFooter>

@@ -161,10 +161,13 @@ export class AdminController {
 
   @Get('providers')
   async listProviders(
-    @Query('offset') offset?: number,
-    @Query('limit') limit?: number,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
   ) {
-    const result = await this.adminService.listProviders({ offset, limit });
+    const result = await this.adminService.listProviders({
+      offset: offset ? parseInt(offset, 10) : 0,
+      limit: limit ? parseInt(limit, 10) : 50,
+    });
     return { success: true, data: result };
   }
 
@@ -177,7 +180,15 @@ export class AdminController {
   @Post('providers')
   async createProvider(
     @Req() req: RequestWithIp,
-    @Body() body: { name: string; type: ProviderType; config: any },
+    @Body() body: {
+      name: string;
+      type: ProviderType;
+      config: any;
+      is_active?: boolean;
+      record_history?: boolean;
+      supports_historical?: boolean;
+      supported_currencies?: string[];
+    },
   ) {
     const adminId = (req as any).user?.id;
     const provider = await this.adminService.createProvider(

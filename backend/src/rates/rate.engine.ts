@@ -4,7 +4,7 @@ import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import axios from 'axios';
 import { ExchangeRate } from './exchange-rate.entity';
-import { Provider, ProviderType } from '../providers/provider.entity';
+import { Provider, ProviderType } from './provider.entity';
 
 // Valid ISO 4217 currency codes (common ones)
 const VALID_CURRENCY_CODES = new Set([
@@ -144,9 +144,9 @@ export class RateEngine {
     date: Date,
   ): Promise<RateResult | null> {
     try {
-      if (provider.provider_type === ProviderType.REST_API) {
+      if (provider.type === ProviderType.REST_API) {
         return await this.fetchFromRestApi(provider, from, to, date);
-      } else if (provider.provider_type === ProviderType.JS_PLUGIN) {
+      } else if (provider.type === ProviderType.JS_PLUGIN) {
         return await this.executeJsPlugin(provider, from, to, date);
       }
       return null;

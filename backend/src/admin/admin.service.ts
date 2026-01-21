@@ -424,6 +424,10 @@ export class AdminService {
       name: string;
       type: ProviderType;
       config: any;
+      is_active?: boolean;
+      record_history?: boolean;
+      supports_historical?: boolean;
+      supported_currencies?: string[];
     },
     adminId: string,
     ipAddress?: string,
@@ -433,14 +437,18 @@ export class AdminService {
       name: data.name,
       type: data.type,
       config: data.config,
-      is_active: true,
+      is_active: data.is_active ?? true,
+      record_history: data.record_history ?? true,
+      supports_historical: data.supports_historical ?? true,
+      supported_currencies: data.supported_currencies ?? [],
       created_at: new Date(),
       updated_at: new Date(),
     });
 
     await this.providerRepository.save(provider);
 
-    await this.log(
+    // Log the action (non-blocking, don't fail if logging fails)
+    this.log(
       adminId,
       'admin.provider.create',
       'provider',
@@ -448,7 +456,9 @@ export class AdminService {
       null,
       provider,
       ipAddress,
-    );
+    ).catch((err) => {
+      console.error('Failed to create audit log:', err);
+    });
 
     return provider;
   }
