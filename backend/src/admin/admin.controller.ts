@@ -326,6 +326,51 @@ export class AdminController {
   }
 
   // =========================================================================
+  // Currency-Provider Management
+  // =========================================================================
+
+  @Get('currency-providers')
+  async listCurrencyProviders() {
+    const associations = await this.adminService.currencyProviderService.getAll();
+    return { success: true, data: associations };
+  }
+
+  @Get('currency-providers/:currencyCode')
+  async getProvidersForCurrency(@Param('currencyCode') currencyCode: string) {
+    const providers = await this.adminService.currencyProviderService.getProvidersForCurrency(currencyCode);
+    return { success: true, data: providers };
+  }
+
+  @Put('currency-providers/:currencyCode/priorities')
+  async updateProviderPriorities(
+    @Param('currencyCode') currencyCode: string,
+    @Body() body: { provider_ids: string[] },
+  ) {
+    await this.adminService.currencyProviderService.reorderProviders(currencyCode, body.provider_ids);
+    return { success: true, message: 'Provider priorities updated' };
+  }
+
+  @Post('currency-providers')
+  async addCurrencyProvider(
+    @Body() body: { currency_code: string; provider_id: string },
+  ) {
+    const association = await this.adminService.currencyProviderService.addAssociation(
+      body.currency_code,
+      body.provider_id,
+    );
+    return { success: true, data: association };
+  }
+
+  @Delete('currency-providers/:currencyCode/:providerId')
+  async removeCurrencyProvider(
+    @Param('currencyCode') currencyCode: string,
+    @Param('providerId') providerId: string,
+  ) {
+    await this.adminService.currencyProviderService.removeAssociation(currencyCode, providerId);
+    return { success: true, message: 'Currency-provider association removed' };
+  }
+
+  // =========================================================================
   // Audit Logs
   // =========================================================================
 

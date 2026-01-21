@@ -1,9 +1,10 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiNotFoundResponse, ApiBadRequestResponse } from '@nestjs/swagger';
-import { Request } from 'express';
 import { ProvidersService } from './providers.service';
 import { CreateProviderDto, UpdateProviderDto } from './dto/provider.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @ApiTags('providers')
 @Controller('providers')
@@ -27,6 +28,8 @@ export class ProvidersController {
     return this.providersService.findById(id);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Post()
   @ApiOperation({ summary: 'Create a new provider' })
   @ApiResponse({ status: 201, description: 'Provider created successfully' })
@@ -35,6 +38,8 @@ export class ProvidersController {
     return this.providersService.create(createProviderDto);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Put(':id')
   @ApiOperation({ summary: 'Update a provider' })
   @ApiResponse({ status: 200, description: 'Provider updated successfully' })
@@ -44,6 +49,8 @@ export class ProvidersController {
     return this.providersService.update(id, updateProviderDto);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a provider (soft delete)' })

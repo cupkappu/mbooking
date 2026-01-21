@@ -16,6 +16,7 @@ import { ExchangeRate } from '../rates/exchange-rate.entity';
 import { Budget } from '../budgets/budget.entity';
 import { Provider, ProviderType } from '../rates/provider.entity';
 import { CurrenciesService } from '../currencies/currencies.service';
+import { CurrencyProviderService } from '../currencies/currency-provider.service';
 import { CreateCurrencyDto, UpdateCurrencyDto } from '../currencies/dto/currency.dto';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
@@ -104,6 +105,7 @@ export class AdminService {
     @InjectRepository(Provider)
     private providerRepository: Repository<Provider>,
     private currenciesService: CurrenciesService,
+    public currencyProviderService: CurrencyProviderService,
   ) {}
 
   // =========================================================================
@@ -447,6 +449,9 @@ export class AdminService {
 
     await this.providerRepository.save(provider);
 
+    // Auto-associate with all currencies
+    await this.currencyProviderService.autoAssociateCurrencies(provider.id);
+
     // Log the action (non-blocking, don't fail if logging fails)
     this.log(
       adminId,
@@ -496,6 +501,9 @@ export class AdminService {
     ipAddress?: string,
   ): Promise<void> {
     const provider = await this.getProvider(providerId);
+
+    // Remove currency associations first
+    await this.currencyProviderService.removeProviderAssociations(providerId);
 
     await this.providerRepository.remove(provider);
 

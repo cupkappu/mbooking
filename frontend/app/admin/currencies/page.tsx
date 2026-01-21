@@ -46,7 +46,14 @@ import {
   useSeedCurrencies,
   AdminCurrency,
 } from '@/hooks/use-currencies';
-import { Plus, Search, RefreshCw, Trash2, Database } from 'lucide-react';
+import {
+  useProvidersForCurrency,
+  useAddCurrencyProvider,
+  useRemoveCurrencyProvider,
+  useUpdateProviderPriorities,
+  useAdminProviders,
+} from '@/hooks/use-admin';
+import { Plus, Search, RefreshCw, Trash2, Database, Settings, ChevronUp, ChevronDown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function AdminCurrenciesPage() {
@@ -68,6 +75,7 @@ export default function AdminCurrenciesPage() {
     decimal_places: '2',
     is_active: true,
   });
+  const [editProviders, setEditProviders] = useState<string[]>([]);
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [currencyToDelete, setCurrencyToDelete] = useState<AdminCurrency | null>(null);
@@ -77,6 +85,11 @@ export default function AdminCurrenciesPage() {
   const updateCurrency = useUpdateCurrency();
   const deleteCurrency = useDeleteCurrency();
   const seedCurrencies = useSeedCurrencies();
+  const { data: allProviders } = useAdminProviders();
+  const { data: currencyProviders, refetch: refetchProviders } = useProvidersForCurrency(selectedCurrency?.code || '');
+  const addCurrencyProvider = useAddCurrencyProvider();
+  const removeCurrencyProvider = useRemoveCurrencyProvider();
+  const updateProviderPriorities = useUpdateProviderPriorities();
   const { toast } = useToast();
 
   const handleCreateCurrency = async () => {
@@ -110,6 +123,26 @@ export default function AdminCurrenciesPage() {
           is_active: editForm.is_active,
         },
       });
+
+      // Update provider associations
+      if (selectedCurrency.code && currencyProviders) {
+        const currentProviderIds = currencyProviders.map(cp => cp.provider_id);
+        const toAdd = editProviders.filter(id => !currentProviderIds.includes(id));
+        const toRemove = currentProviderIds.filter(id => !editProviders.includes(id));
+
+        for (const providerId of toRemove) {
+          await removeCurrencyProvider.mutateAsync({ currencyCode: selectedCurrency.code, providerId });
+        }
+        for (const providerId of toAdd) {
+          await addCurrencyProvider.mutateAsync({ currency_code: selectedCurrency.code, provider_id: providerId });
+        }
+
+        // Update priorities
+        await updateProviderPriorities.mutateAsync({
+          currencyCode: selectedCurrency.code,
+          providerIds: editProviders,
+        });
+      }
 
       toast({ title: 'Currency updated successfully' });
       setShowEditDialog(false);
@@ -154,6 +187,9 @@ export default function AdminCurrenciesPage() {
       decimal_places: String(currency.decimal_places),
       is_active: currency.is_active,
     });
+    // Load associated providers
+    const providerIds = currencyProviders?.map(cp => cp.provider_id) || [];
+    setEditProviders(providerIds);
     setShowEditDialog(true);
   };
 
@@ -385,6 +421,45 @@ export default function AdminCurrenciesPage() {
                   <SelectItem value="false">Inactive</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Provider Selection */}
+            <div className="space-y-2">
+              <Label>Rate Providers (drag to reorder priority)</Label>
+              {allProviders?.providers && allProviders.providers.length > 0 ? (
+                <div className="border rounded-md p-3 space-y-2 max-h-48 overflow-y-auto">
+                  {allProviders.providers.map((provider) => (
+                    <div
+                      key={provider.id}
+                      className={`flex items-center gap-2 p-2 rounded ${
+                        editProviders.includes(provider.id) ? 'bg-primary/10' : 'bg-muted/50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={editProviders.includes(provider.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setEditProviders([...editProviders, provider.id]);
+                          } else {
+                            setEditProviders(editProviders.filter(id => id !== provider.id));
+                          }
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                      <span className="flex-1 text-sm">{provider.name}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {provider.type.replace('_', ' ')}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No providers available</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Select rate providers for this currency. Order determines priority.
+              </p>
             </div>
           </div>
           <DialogFooter>

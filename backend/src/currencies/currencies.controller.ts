@@ -14,6 +14,8 @@ import {
 } from '@nestjs/swagger';
 import { CurrenciesService } from './currencies.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentTenant } from '../common/decorators/tenant.decorator';
 import { CurrentUser } from '../common/decorators/tenant.decorator';
 
@@ -39,6 +41,8 @@ export class CurrenciesController {
     return this.currenciesService.findByCode(code);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @Post(':code/set-default')
   @ApiOperation({ summary: 'Set default currency for tenant' })
   @ApiResponse({ status: 200, description: 'Currency set as default' })

@@ -8,6 +8,7 @@ import { Account } from '../accounts/account.entity';
 import { JournalEntry } from '../journal/journal-entry.entity';
 import { JournalLine } from '../journal/journal-line.entity';
 import { Currency } from '../currencies/currency.entity';
+import { CurrencyProvider } from '../currencies/currency-provider.entity';
 import { ExchangeRate } from '../rates/exchange-rate.entity';
 import { Budget } from '../budgets/budget.entity';
 import { Provider } from '../rates/provider.entity';
@@ -22,6 +23,7 @@ import { CurrenciesModule } from '../currencies/currencies.module';
       JournalEntry,
       JournalLine,
       Currency,
+      CurrencyProvider,
       ExchangeRate,
       Budget,
       Provider,

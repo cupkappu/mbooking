@@ -33,8 +33,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useAdminProviders, useCreateProvider, useUpdateProvider, useToggleProvider, useTestProvider, useAvailablePlugins, Provider } from '@/hooks/use-admin';
-import { Plus, Search, RefreshCw, Play, Power, CheckCircle, XCircle, FileCode, Info } from 'lucide-react';
+import { useAdminProviders, useCreateProvider, useUpdateProvider, useToggleProvider, useTestProvider, useAvailablePlugins, useDeleteProvider, Provider } from '@/hooks/use-admin';
+import { Plus, Search, RefreshCw, Play, Power, CheckCircle, XCircle, FileCode, Info, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function AdminProvidersPage() {
@@ -62,10 +62,15 @@ export default function AdminProvidersPage() {
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [editForm, setEditForm] = useState({ name: '', is_active: true, config: '{}' });
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Delete confirmation state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [providerToDelete, setProviderToDelete] = useState<Provider | null>(null);
   
   const { data, isLoading, refetch } = useAdminProviders({ offset, limit: 20 });
   const createProvider = useCreateProvider();
   const updateProvider = useUpdateProvider();
+  const deleteProvider = useDeleteProvider();
   const toggleProvider = useToggleProvider();
   const testProvider = useTestProvider();
   const { data: availablePlugins } = useAvailablePlugins();
@@ -156,6 +161,16 @@ export default function AdminProvidersPage() {
     }
   };
 
+  const handleDeleteProvider = async (id: string) => {
+    try {
+      await deleteProvider.mutateAsync(id);
+      toast({ title: 'Provider deleted successfully' });
+      refetch();
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  };
+
   const handleTestProvider = async (id: string) => {
     try {
       const result = await testProvider.mutateAsync(id);
@@ -178,6 +193,11 @@ export default function AdminProvidersPage() {
       config: JSON.stringify(provider.config, null, 2),
     });
     setShowEditDialog(true);
+  };
+
+  const openDeleteDialog = (provider: Provider) => {
+    setProviderToDelete(provider);
+    setShowDeleteDialog(true);
   };
 
   const filteredProviders = data?.providers.filter(p =>
@@ -264,12 +284,19 @@ export default function AdminProvidersPage() {
                     <TableCell>{new Date(provider.created_at).toLocaleDateString()}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button variant="outline" size="sm" onClick={() => openEditDialog(provider)}>
+                          <Edit className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
                         <Button variant="outline" size="sm" onClick={() => handleTestProvider(provider.id)}>
                           <Play className="h-3 w-3 mr-1" />
                           Test
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => handleToggleProvider(provider.id)}>
                           {provider.is_active ? <XCircle className="h-3 w-3" /> : <Power className="h-3 w-3" />}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => openDeleteDialog(provider)} className="text-destructive hover:text-destructive">
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                     </TableCell>
@@ -437,6 +464,28 @@ export default function AdminProvidersPage() {
               disabled={!createForm.name || createProvider.isPending || (createForm.type === 'js_plugin' && !createForm.selected_plugin_file)}
             >
               {createProvider.isPending ? 'Creating...' : 'Create Provider'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Provider</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{providerToDelete?.name}"? This will also remove all currency associations.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => providerToDelete && handleDeleteProvider(providerToDelete.id)}
+              disabled={deleteProvider.isPending}
+            >
+              {deleteProvider.isPending ? 'Deleting...' : 'Delete Provider'}
             </Button>
           </DialogFooter>
         </DialogContent>

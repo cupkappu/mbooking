@@ -181,6 +181,62 @@ export function useTestProvider() {
   });
 }
 
+export function useDeleteProvider() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/admin/providers/${id}`),
+  });
+}
+
+// =========================================================================
+// Currency-Provider Management
+// =========================================================================
+
+export interface CurrencyProvider {
+  id: string;
+  currency_code: string;
+  provider_id: string;
+  priority: number;
+  is_active: boolean;
+  provider_name?: string;
+}
+
+export function useCurrencyProviders() {
+  return useQuery({
+    queryKey: ['currency-providers'],
+    queryFn: () => apiClient.get<CurrencyProvider[]>('/admin/currency-providers'),
+  });
+}
+
+export function useProvidersForCurrency(currencyCode: string) {
+  return useQuery({
+    queryKey: ['currency-providers', currencyCode],
+    queryFn: () => apiClient.get<CurrencyProvider[]>(`/admin/currency-providers/${currencyCode}`),
+    enabled: !!currencyCode,
+  });
+}
+
+export function useAddCurrencyProvider() {
+  return useMutation({
+    mutationFn: (data: { currency_code: string; provider_id: string }) =>
+      apiClient.post<CurrencyProvider>('/admin/currency-providers', data),
+  });
+}
+
+export function useRemoveCurrencyProvider() {
+  return useMutation({
+    mutationFn: ({ currencyCode, providerId }: { currencyCode: string; providerId: string }) =>
+      apiClient.delete(`/admin/currency-providers/${currencyCode}/${providerId}`),
+  });
+}
+
+export function useUpdateProviderPriorities() {
+  return useMutation({
+    mutationFn: ({ currencyCode, providerIds }: { currencyCode: string; providerIds: string[] }) =>
+      apiClient.put(`/admin/currency-providers/${currencyCode}/priorities`, { provider_ids: providerIds }),
+  });
+}
+
 export function useAuditLogs(options?: {
   offset?: number;
   limit?: number;
