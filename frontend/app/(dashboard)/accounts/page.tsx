@@ -484,7 +484,7 @@ export default function AccountsPage() {
         setShowForm(open);
         if (!open) {
           setEditingAccount(null);
-          setFormData({ name: '', type: 'assets' as const, parent_id: '', currency: 'USD' });
+          setFormData({ name: '', type: 'assets' as const, parent_id: '', currency: defaultCurrency || 'USD'});
         }
       }}>
         <DialogContent>

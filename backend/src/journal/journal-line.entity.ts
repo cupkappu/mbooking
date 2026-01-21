@@ -25,12 +25,6 @@ export class JournalLine {
   @Column({ length: 10 })
   currency: string;
 
-  @Column({ type: 'decimal', precision: 20, scale: 8, nullable: true })
-  exchange_rate: number;
-
-  @Column({ type: 'decimal', precision: 20, scale: 4, nullable: true })
-  converted_amount: number;
-
   @Column({ type: 'text', array: true, default: '{}' })
   tags: string[];
 

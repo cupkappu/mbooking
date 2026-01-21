@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Account, AccountType } from '../accounts/account.entity';
-import { JournalLine } from '../journal/journal-line.entity';
+import { QueryService } from '../query/query.service';
+import { TenantsService } from '../tenants/tenants.service';
 
 interface IncomeStatementSection {
   name: string;
@@ -11,6 +12,7 @@ interface IncomeStatementSection {
     name: string;
     amount: number;
     currency: string;
+    converted_amount?: number;
   }>;
   total: number;
 }
@@ -36,8 +38,8 @@ export class IncomeStatementGenerator {
   constructor(
     @InjectRepository(Account)
     private accountRepository: Repository<Account>,
-    @InjectRepository(JournalLine)
-    private journalLineRepository: Repository<JournalLine>,
+    private queryService: QueryService,
+    private tenantsService: TenantsService,
   ) {}
 
   async generate(
@@ -51,28 +53,58 @@ export class IncomeStatementGenerator {
       where: { tenant_id: tenantId, is_active: true },
     });
 
+    // Get tenant's default currency
+    let defaultCurrency = 'USD';
+    try {
+      const tenant = await this.tenantsService.findById(tenantId);
+      defaultCurrency = tenant.settings?.default_currency || 'USD';
+    } catch {}
+
     const revenueAccounts = accounts.filter((a) => a.type === AccountType.REVENUE);
     const expenseAccounts = accounts.filter((a) => a.type === AccountType.EXPENSE);
 
-    const revenueData = await this.calculateAccountTotals(tenantId, fromDate, toDate, revenueAccounts);
-    const expenseData = await this.calculateAccountTotals(tenantId, fromDate, toDate, expenseAccounts);
+    // Get balances from QueryService using default currency
+    const balancesResult = await this.queryService.getBalances({
+      date_range: { from: fromDate.toISOString().split('T')[0], to: toDate.toISOString().split('T')[0] },
+      include_subtree: true,
+    });
 
-    const revenueItems = revenueAccounts.map((account) => ({
-      path: account.path,
-      name: account.name,
-      amount: revenueData.get(account.id) || 0,
-      currency,
-    }));
+    // Build maps: original amounts and converted totals (in default currency)
+    const originalAmountMap = new Map<string, { amount: number; currency: string }>();
+    const convertedAmountMap = new Map<string, number>();
 
-    const expenseItems = expenseAccounts.map((account) => ({
-      path: account.path,
-      name: account.name,
-      amount: expenseData.get(account.id) || 0,
-      currency,
-    }));
+    for (const balance of balancesResult.balances) {
+      const originalAmount = balance.currencies.reduce((sum, c) => sum + c.amount, 0);
+      const primaryCurrency = balance.currencies[0]?.currency || defaultCurrency;
+      originalAmountMap.set(balance.account.id, { amount: originalAmount, currency: primaryCurrency });
+      convertedAmountMap.set(balance.account.id, balance.converted_total || 0);
+    }
 
-    const revenueTotal = Array.from(revenueData.values()).reduce((sum, val) => sum + val, 0);
-    const expenseTotal = Array.from(expenseData.values()).reduce((sum, val) => sum + val, 0);
+    const revenueItems = revenueAccounts.map((account) => {
+      const original = originalAmountMap.get(account.id) || { amount: 0, currency: defaultCurrency };
+      return {
+        path: account.path,
+        name: account.name,
+        amount: original.amount,
+        currency: original.currency,
+        converted_amount: convertedAmountMap.get(account.id),
+      };
+    });
+
+    const expenseItems = expenseAccounts.map((account) => {
+      const original = originalAmountMap.get(account.id) || { amount: 0, currency: defaultCurrency };
+      return {
+        path: account.path,
+        name: account.name,
+        amount: original.amount,
+        currency: original.currency,
+        converted_amount: convertedAmountMap.get(account.id),
+      };
+    });
+
+    // Calculate totals using converted amounts (in default currency)
+    const revenueTotal = revenueItems.reduce((sum, item) => sum + (item.converted_amount || 0), 0);
+    const expenseTotal = expenseItems.reduce((sum, item) => sum + (item.converted_amount || 0), 0);
 
     const revenue: IncomeStatementSection = {
       name: 'Revenue',
@@ -101,35 +133,8 @@ export class IncomeStatementGenerator {
         revenue: revenueTotal,
         expenses: expenseTotal,
         net_income: revenueTotal - expenseTotal,
-        currency,
+        currency: defaultCurrency,
       },
     };
-  }
-
-  private async calculateAccountTotals(
-    tenantId: string,
-    fromDate: Date,
-    toDate: Date,
-    accounts: Account[],
-  ): Promise<Map<string, number>> {
-    const accountIds = accounts.map((a) => a.id);
-    if (accountIds.length === 0) return new Map();
-
-    const lines = await this.journalLineRepository
-      .createQueryBuilder('line')
-      .innerJoin('line.journal_entry', 'entry')
-      .where('line.tenant_id = :tenantId', { tenantId })
-      .andWhere('line.account_id IN (:...accountIds)', { accountIds })
-      .andWhere('entry.date >= :fromDate', { fromDate })
-      .andWhere('entry.date <= :toDate', { toDate })
-      .select(['line.account_id', 'SUM(line.converted_amount) as total'])
-      .groupBy('line.account_id')
-      .getRawMany();
-
-    const totals = new Map<string, number>();
-    for (const line of lines) {
-      totals.set(line.line_account_id, parseFloat(line.total) || 0);
-    }
-    return totals;
-  }
+   }
 }

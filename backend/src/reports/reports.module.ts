@@ -11,9 +11,15 @@ import { BalanceSheetGenerator } from './balance-sheet.generator';
 import { IncomeStatementGenerator } from './income-statement.generator';
 import { IncomeStatementComparisonGenerator } from './income-statement-comparison.generator';
 import { CashFlowStatementGenerator } from './cash-flow.generator';
+import { QueryModule } from '../query/query.module';
+import { TenantsModule } from '../tenants/tenants.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Account, JournalLine, JournalEntry, ReportStorage])],
+  imports: [
+    TypeOrmModule.forFeature([Account, JournalLine, JournalEntry, ReportStorage]),
+    QueryModule,
+    TenantsModule,
+  ],
   controllers: [ReportsController],
   providers: [ReportsService, ReportCacheService, BalanceSheetGenerator, IncomeStatementGenerator, IncomeStatementComparisonGenerator, CashFlowStatementGenerator],
   exports: [ReportsService, ReportCacheService],

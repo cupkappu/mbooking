@@ -2,8 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Account, AccountType } from '../accounts/account.entity';
-import { JournalLine } from '../journal/journal-line.entity';
 import { IncomeStatementGenerator, IncomeStatement } from './income-statement.generator';
+import { QueryService } from '../query/query.service';
+import { TenantsService } from '../tenants/tenants.service';
 
 export interface PeriodComparisonItem {
   path: string;
@@ -55,9 +56,9 @@ export class IncomeStatementComparisonGenerator {
   constructor(
     @InjectRepository(Account)
     private accountRepository: Repository<Account>,
-    @InjectRepository(JournalLine)
-    private journalLineRepository: Repository<JournalLine>,
     private incomeStatementGenerator: IncomeStatementGenerator,
+    private queryService: QueryService,
+    private tenantsService: TenantsService,
   ) {}
 
   async generate(
@@ -73,6 +74,13 @@ export class IncomeStatementComparisonGenerator {
   ): Promise<IncomeStatementComparison> {
     const { currentFromDate, currentToDate, priorFromDate, priorToDate, depth = 2, currency = 'USD' } = options;
 
+    // Get tenant's default currency
+    let defaultCurrency = 'USD';
+    try {
+      const tenant = await this.tenantsService.findById(tenantId);
+      defaultCurrency = tenant.settings?.default_currency || 'USD';
+    } catch {}
+
     const accounts = await this.accountRepository.find({
       where: { tenant_id: tenantId, is_active: true },
     });
@@ -80,13 +88,30 @@ export class IncomeStatementComparisonGenerator {
     const revenueAccounts = accounts.filter((a) => a.type === AccountType.REVENUE);
     const expenseAccounts = accounts.filter((a) => a.type === AccountType.EXPENSE);
 
-    const currentRevenueData = await this.calculateAccountTotals(tenantId, currentFromDate, currentToDate, revenueAccounts);
-    const priorRevenueData = await this.calculateAccountTotals(tenantId, priorFromDate, priorToDate, revenueAccounts);
-    const currentExpenseData = await this.calculateAccountTotals(tenantId, currentFromDate, currentToDate, expenseAccounts);
-    const priorExpenseData = await this.calculateAccountTotals(tenantId, priorFromDate, priorToDate, expenseAccounts);
+    // Get current period balances using default currency
+    const currentBalances = await this.queryService.getBalances({
+      date_range: { from: currentFromDate.toISOString().split('T')[0], to: currentToDate.toISOString().split('T')[0] },
+      include_subtree: true,
+    });
 
-    const revenueItems = this.compareItems(revenueAccounts, currentRevenueData, priorRevenueData, currency);
-    const expenseItems = this.compareItems(expenseAccounts, currentExpenseData, priorExpenseData, currency);
+    // Get prior period balances using default currency
+    const priorBalances = await this.queryService.getBalances({
+      date_range: { from: priorFromDate.toISOString().split('T')[0], to: priorToDate.toISOString().split('T')[0] },
+      include_subtree: true,
+    });
+
+    const currentBalanceMap = new Map<string, number>();
+    for (const balance of currentBalances.balances) {
+      currentBalanceMap.set(balance.account.id, balance.converted_total || 0);
+    }
+
+    const priorBalanceMap = new Map<string, number>();
+    for (const balance of priorBalances.balances) {
+      priorBalanceMap.set(balance.account.id, balance.converted_total || 0);
+    }
+
+    const revenueItems = this.compareItems(revenueAccounts, currentBalanceMap, priorBalanceMap, defaultCurrency);
+    const expenseItems = this.compareItems(expenseAccounts, currentBalanceMap, priorBalanceMap, defaultCurrency);
 
     const revenueSection = this.createSection('Revenue', revenueItems);
     const expenseSection = this.createSection('Expenses', expenseItems);
@@ -117,10 +142,10 @@ export class IncomeStatementComparisonGenerator {
           variance: 0,
           variance_percent: 0,
         },
-        currency,
+        currency: defaultCurrency,
       },
     };
-  }
+   }
 
   private compareItems(
     accounts: Account[],
@@ -164,32 +189,5 @@ export class IncomeStatementComparisonGenerator {
         variance_percent: parseFloat(variancePercent.toFixed(2)),
       },
     };
-  }
-
-  private async calculateAccountTotals(
-    tenantId: string,
-    fromDate: Date,
-    toDate: Date,
-    accounts: Account[],
-  ): Promise<Map<string, number>> {
-    const accountIds = accounts.map((a) => a.id);
-    if (accountIds.length === 0) return new Map();
-
-    const lines = await this.journalLineRepository
-      .createQueryBuilder('line')
-      .innerJoin('line.journal_entry', 'entry')
-      .where('line.tenant_id = :tenantId', { tenantId })
-      .andWhere('line.account_id IN (:...accountIds)', { accountIds })
-      .andWhere('entry.date >= :fromDate', { fromDate })
-      .andWhere('entry.date <= :toDate', { toDate })
-      .select(['line.account_id', 'SUM(line.converted_amount) as total'])
-      .groupBy('line.account_id')
-      .getRawMany();
-
-    const totals = new Map<string, number>();
-    for (const line of lines) {
-      totals.set(line.line_account_id, parseFloat(line.total) || 0);
-    }
-    return totals;
-  }
+   }
 }

@@ -6,6 +6,17 @@ import { JournalLine } from './journal-line.entity';
 import { QueryService } from '../query/query.service';
 import { TenantContext } from '../common/context/tenant.context';
 import { CurrenciesService } from '../currencies/currencies.service';
+import { RateEngine } from '../rates/rate.engine';
+import { TenantsService } from '../tenants/tenants.service';
+
+export type JournalLineWithConverted = JournalLine & {
+  exchange_rate: number | null;
+  converted_amount: number | null;
+};
+
+export interface JournalEntryWithConverted extends JournalEntry {
+  lines: JournalLineWithConverted[];
+}
 
 @Injectable()
 export class JournalService {
@@ -17,6 +28,8 @@ export class JournalService {
     @Inject(forwardRef(() => QueryService))
     private queryService: QueryService,
     private currenciesService: CurrenciesService,
+    private rateEngine: RateEngine,
+    private tenantsService: TenantsService,
   ) {}
 
   private getTenantId(): string {
@@ -27,19 +40,85 @@ export class JournalService {
     return TenantContext.requireUserId();
   }
 
-  async findAll(options: any = {}): Promise<JournalEntry[]> {
+  private async getDefaultCurrency(): Promise<string> {
+    const tenantId = TenantContext.requireTenantId();
+    try {
+      const tenant = await this.tenantsService.findById(tenantId);
+      return tenant.settings?.default_currency || 'USD';
+    } catch {
+      return 'USD';
+    }
+  }
+
+  private async calculateConvertedAmount(
+    amount: number,
+    currency: string,
+    date: Date,
+    defaultCurrency: string,
+  ): Promise<{ exchange_rate: number; converted_amount: number } | null> {
+    if (currency === defaultCurrency) {
+      return { exchange_rate: 1, converted_amount: amount };
+    }
+
+    const rate = await this.rateEngine.getRate(currency, defaultCurrency, { date });
+    if (rate) {
+      return {
+        exchange_rate: rate.rate,
+        converted_amount: amount * rate.rate,
+      };
+    }
+    
+    // Fallback to latest rate if historical rate not available
+    const latestRate = await this.rateEngine.getRate(currency, defaultCurrency);
+    if (latestRate) {
+      return {
+        exchange_rate: latestRate.rate,
+        converted_amount: amount * latestRate.rate,
+      };
+    }
+    
+    return null;
+  }
+
+  async findAll(options: any = {}): Promise<JournalEntryWithConverted[]> {
     const tenantId = this.getTenantId();
-    return this.journalEntryRepository.find({
+    const defaultCurrency = await this.getDefaultCurrency();
+    
+    const entries = await this.journalEntryRepository.find({
       where: { tenant_id: tenantId },
       relations: ['lines'],
       order: { date: 'DESC' },
       skip: options.offset || 0,
       take: options.limit || 50,
     });
+
+    for (const entry of entries) {
+      const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
+      for (const line of entry.lines) {
+        const converted = await this.calculateConvertedAmount(
+          Number(line.amount),
+          line.currency,
+          entryDate,
+          defaultCurrency
+        );
+        const lineWithConverted = line as JournalLineWithConverted;
+        if (converted) {
+          lineWithConverted.exchange_rate = converted.exchange_rate;
+          lineWithConverted.converted_amount = converted.converted_amount;
+        } else {
+          lineWithConverted.exchange_rate = 1;
+          lineWithConverted.converted_amount = Number(line.amount);
+        }
+      }
+    }
+
+    return entries as JournalEntryWithConverted[];
   }
 
-  async findById(id: string): Promise<JournalEntry> {
+  async findById(id: string): Promise<JournalEntryWithConverted> {
     const tenantId = this.getTenantId();
+    const defaultCurrency = await this.getDefaultCurrency();
+    
     const entry = await this.journalEntryRepository.findOne({
       where: { id, tenant_id: tenantId },
       relations: ['lines'],
@@ -47,7 +126,26 @@ export class JournalService {
     if (!entry) {
       throw new NotFoundException(`Journal entry ${id} not found`);
     }
-    return entry;
+
+    const entryDate = entry.date instanceof Date ? entry.date : new Date(entry.date);
+    for (const line of entry.lines) {
+      const converted = await this.calculateConvertedAmount(
+        Number(line.amount),
+        line.currency,
+        entryDate,
+        defaultCurrency
+      );
+      const lineWithConverted = line as JournalLineWithConverted;
+      if (converted) {
+        lineWithConverted.exchange_rate = converted.exchange_rate;
+        lineWithConverted.converted_amount = converted.converted_amount;
+      } else {
+        lineWithConverted.exchange_rate = 1;
+        lineWithConverted.converted_amount = Number(line.amount);
+      }
+    }
+
+    return entry as JournalEntryWithConverted;
   }
 
   async create(data: {
@@ -58,8 +156,6 @@ export class JournalService {
       account_id: string;
       amount: number;
       currency: string;
-      exchange_rate?: number;
-      converted_amount?: number;
       tags?: string[];
       remarks?: string;
     }>;
@@ -79,11 +175,16 @@ export class JournalService {
 
     const savedEntry = await this.journalEntryRepository.save(entry);
 
+    // Create lines without storing exchange_rate/converted_amount (calculated on fetch)
     const lines = data.lines.map((line) =>
       this.journalLineRepository.create({
         journal_entry_id: savedEntry.id,
         tenant_id: tenantId,
-        ...line,
+        account_id: line.account_id,
+        amount: line.amount,
+        currency: line.currency,
+        tags: line.tags || [],
+        remarks: line.remarks,
       }),
     );
 
@@ -131,7 +232,11 @@ export class JournalService {
         this.journalLineRepository.create({
           journal_entry_id: id,
           tenant_id: tenantId,
-          ...line,
+          account_id: line.account_id,
+          amount: line.amount,
+          currency: line.currency,
+          tags: line.tags || [],
+          remarks: line.remarks,
         }),
       );
       await this.journalLineRepository.save(lines);

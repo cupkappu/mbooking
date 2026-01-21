@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual, LessThanOrEqual, Between } from 'typeorm';
+import { Repository, MoreThanOrEqual } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { Budget, BudgetType, PeriodType } from './budget.entity';
 import { BudgetAlert, AlertType, AlertStatus } from './entities/budget-alert.entity';
 import { JournalLine } from '../journal/journal-line.entity';
 import { Account } from '../accounts/account.entity';
+import { QueryService } from '../query/query.service';
 
 export interface AlertResult {
   alerts: BudgetAlert[];
@@ -24,6 +25,7 @@ export class BudgetAlertService {
     private journalLineRepository: Repository<JournalLine>,
     @InjectRepository(Account)
     private accountRepository: Repository<Account>,
+    private queryService: QueryService,
   ) {}
 
   async checkBudgetAlerts(tenantId: string): Promise<AlertResult> {
@@ -75,16 +77,19 @@ export class BudgetAlertService {
   async calculateSpentAmount(budget: Budget): Promise<number> {
     const { start_date, end_date } = this.getBudgetPeriod(budget);
 
-    const result = await this.journalLineRepository
-      .createQueryBuilder('line')
-      .innerJoin('line.journal_entry', 'entry')
-      .where('line.tenant_id = :tenantId', { tenantId: budget.tenant_id })
-      .andWhere('entry.date >= :startDate', { startDate: start_date })
-      .andWhere('entry.date <= :endDate', { endDate: end_date })
-      .select('SUM(line.converted_amount)', 'total')
-      .getRawOne();
+    // Get balances from QueryService for the budget period
+    const balancesResult = await this.queryService.getBalances({
+      date_range: { from: start_date.toISOString().split('T')[0], to: end_date.toISOString().split('T')[0] },
+      include_subtree: true,
+    });
 
-    return parseFloat(result?.total) || 0;
+    // Sum up all converted amounts
+    let total = 0;
+    for (const balance of balancesResult.balances) {
+      total += balance.converted_subtree_total || 0;
+    }
+
+    return total;
   }
 
   private getBudgetPeriod(budget: Budget): { start_date: Date; end_date: Date } {

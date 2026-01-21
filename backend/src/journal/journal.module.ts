@@ -6,12 +6,16 @@ import { JournalService } from './journal.service';
 import { JournalController } from './journal.controller';
 import { QueryModule } from '../query/query.module';
 import { CurrenciesModule } from '../currencies/currencies.module';
+import { RatesModule } from '../rates/rates.module';
+import { TenantsModule } from '../tenants/tenants.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([JournalEntry, JournalLine]),
     forwardRef(() => QueryModule),
     CurrenciesModule,
+    RatesModule,
+    TenantsModule,
   ],
   controllers: [JournalController],
   providers: [JournalService],

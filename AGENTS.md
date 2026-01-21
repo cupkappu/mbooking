@@ -1,6 +1,7 @@
 # Multi-Currency Accounting - Agent Knowledge Base
 
-**Generated:** 2026-01-18
+**Generated:** 2026-01-21
+**Commit:** 0dc90cf0 (feat: enhance provider creation form with new fields and validation)
 **Branch:** develop
 **Tech Stack:** Next.js 14 + NestJS 10 + PostgreSQL 15
 
@@ -19,10 +20,10 @@ multi_currency_accounting/
 ├── frontend/              # Next.js 14 App Router (Port 8068)
 │   ├── app/              # Pages + API routes
 │   ├── components/       # UI + feature components
-│   ├── hooks/           # Custom React hooks
+│   ├── hooks/           # Custom React hooks (use-*.ts)
 │   ├── lib/             # Utilities + API client
 │   ├── providers/       # Context providers (session, query)
-│   ├── tests/           # Test utilities
+│   ├── tests/           # Test utilities + E2E page objects
 │   └── types/           # TypeScript definitions
 ├── backend/              # NestJS 10 (Port 8067)
 │   ├── src/
@@ -44,9 +45,10 @@ multi_currency_accounting/
 ├── docs/
 │   ├── requirements/    # Decomposed requirements
 │   └── architecture/    # Design documents
-└── database/
-    ├── migrations/      # TypeORM migrations (TODO: create)
-    └── seeders/         # Seed data
+├── database/
+│   ├── migrations/      # TypeORM migrations (TODO: create)
+│   └── seeders/         # Seed data
+└── e2e/                 # Root E2E tests (10 spec files)
 ```
 
 ---
@@ -69,7 +71,7 @@ multi_currency_accounting/
 | `frontend/providers/app-providers.tsx` | SessionProvider + QueryProvider wrapper |
 | `(dashboard)/layout.tsx` | Sidebar nav, SessionSync, UserMenu |
 | `(auth)/layout.tsx` | Centered auth layout |
-| `(admin)/layout.tsx` | Admin panel layout (8 nav items) |
+| `(admin)/layout.tsx` | Admin panel layout (10 nav items) |
 
 ---
 
@@ -85,14 +87,15 @@ multi_currency_accounting/
 - **Multi-stage builds**: `node:20-alpine` base, non-root user (UID/GID 99999)
 - **Frontend**: Standalone output mode for minimal image
 - **Backend**: Plugins directory copied separately for hot-reload
-- **Services**: PostgreSQL 15 (5432), Backend (8067), Frontend (8068)
+- **Services**: PostgreSQL 15 (5432), Backend (8067→3001), Frontend (8068→3000)
 - **Resource limits**: Backend (1 CPU, 1GB), Frontend (0.5 CPU, 512MB)
 
-### Non-Standard Patterns
-- Chinese comments in GitHub Actions workflows
-- Multi-architecture builds (amd64/arm64) via Buildx
-- TypeScript source validation in CI (fails if .ts in production image)
-- CI-aware Playwright: `forbidOnly: true`, retries on CI only, sequential workers
+### Non-Standard CI/CD Patterns
+- **Chinese comments** in GitHub Actions workflows
+- **Multi-architecture builds** (amd64/arm64) via Buildx
+- **TypeScript source validation** in CI (fails if .ts in production image)
+- **CI-aware Playwright**: `forbidOnly: true`, retries on CI only, sequential workers
+- **TS source leak prevention**: Build fails if .ts files exist in production Docker image
 
 ---
 
@@ -126,6 +129,51 @@ AUTHELIA_URL/API_KEY    # SSO
 
 ---
 
+## Test Patterns
+
+### Test Configuration Summary
+| Aspect | Frontend | Backend | E2E |
+|--------|----------|---------|-----|
+| **Framework** | Jest + jsdom | Jest + node | Playwright |
+| **Config** | jest.config.ts | package.json | playwright.config.ts (root + frontend) |
+| **Test Pattern** | `*.spec.ts`, `*.spec.tsx` | `*.spec.ts` (co-located) | `*.spec.ts` |
+| **Port** | 3000 | 3001 | 8068 (root) / 3000 (frontend) |
+
+### Unique Conventions
+
+**CI-Aware Playwright:**
+```typescript
+forbidOnly: !!process.env.CI,        // Fails if test.only left in code
+retries: process.env.CI ? 2 : 0,     // Retries only in CI
+workers: process.env.CI ? 1 : undefined, // Sequential in CI
+reuseExistingServer: !process.env.CI // Fresh server in CI
+```
+
+**Tenant Context Helper (Backend):**
+```typescript
+const result = await runWithTenant('tenant-1', () => service.findAll());
+```
+
+**Page Object Model (Frontend E2E):**
+- `tests/utils/auth.ts`: loginAsAdmin(), loginAsUser()
+- `tests/utils/page-objects.ts`: BasePage, LoginPage, DashboardPage
+
+### Test Files Found
+| Category | Count | Notable Files |
+|----------|-------|---------------|
+| Backend .spec.ts | 13 | `comprehensive.tdd.spec.ts` (1012 lines - anti-pattern) |
+| E2E .spec.ts (root) | 10 | `complete-e2e-flow.spec.ts`, `tdd-dashboard.spec.ts` |
+| Frontend tests/ | 8 | Page objects, auth helpers, test data constants |
+
+### Commands
+```bash
+npm test                # All workspace tests
+npm run test:e2e        # Playwright E2E tests
+cd backend && npm run test:cov  # Backend coverage
+```
+
+---
+
 ## Subagent Responsibilities
 
 ### Frontend Tasks → `frontend-ui-ux-engineer`
@@ -144,9 +192,6 @@ AUTHELIA_URL/API_KEY    # SSO
 - Type definitions
 - Route handling
 
-**Frontend entry:** `frontend/app/page.tsx` → redirects to dashboard
-**API proxy:** `frontend/app/api/[...nextauth]` → forwards to backend
-
 ### Backend Tasks → Delegate to appropriate subagent
 
 | Domain | Subagent | Trigger |
@@ -164,11 +209,6 @@ AUTHELIA_URL/API_KEY    # SSO
 - User guides (README additions)
 - Architecture decision records (ADRs)
 - Requirements decomposition
-
-**Handle directly:**
-- Code comments
-- Commit messages
-- Inline documentation
 
 ### Complex Investigation → `oracle`
 
@@ -192,6 +232,7 @@ AUTHELIA_URL/API_KEY    # SSO
 | Reports | `backend/src/reports/` + `frontend/app/(dashboard)/reports/` | Balance sheet, income |
 | Budgets | `backend/src/budgets/` + `frontend/components/budgets/` | Periodic + one-time |
 | Settings | `frontend/app/(dashboard)/settings/` + `backend/src/currencies/` | Currencies, providers |
+| Admin panel | `frontend/app/admin/` + `backend/src/admin/` | 10 admin modules |
 
 ---
 
@@ -211,48 +252,6 @@ AUTHELIA_URL/API_KEY    # SSO
 | `REQUIREMENTS_ADMIN.md` | Admin management | User management, system config |
 | `REQUIREMENTS_API.md` | API specifications | Endpoints, authentication |
 | `REQUIREMENTS_DATABASE.md` | Data model | Entities, RLS, migrations |
-
-**Cross-reference pattern:**
-```markdown
-// In each requirements file:
-See also:
-- [Core Features](../REQUIREMENTS_CORE.md#account-types)
-- [API Specs](../REQUIREMENTS_API.md#journal-endpoints)
-- [Database](../REQUIREMENTS_DATABASE.md#journal-entries)
-```
-
----
-
-## Admin Management System Requirements
-
-**Location:** `docs/requirements/REQUIREMENTS_ADMIN.md`
-
-### Admin Features
-
-| Module | Description |
-|--------|-------------|
-| User Management | Create, update, disable users; role assignment |
-| System Settings | Currency defaults, timezone, date formats |
-| Provider Admin | Configure rate providers, test connections |
-| Audit Logs | Track all system actions, export logs |
-| Data Export | Full data export for backup/migration |
-| Plugin Management | Upload, configure, enable/disable plugins |
-| Scheduler Control | Manage rate fetching schedules, manual triggers |
-| Health Monitoring | System status, database connectivity, cache |
-
-### Admin API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/v1/admin/users` | List users with pagination |
-| POST | `/api/v1/admin/users` | Create new user |
-| PUT | `/api/v1/admin/users/:id` | Update user |
-| DELETE | `/api/v1/admin/users/:id` | Soft-delete user |
-| GET | `/api/v1/admin/system/config` | Get system configuration |
-| PUT | `/api/v1/admin/system/config` | Update system settings |
-| GET | `/api/v1/admin/logs` | Query audit logs |
-| GET | `/api/v1/admin/export` | Trigger data export |
-| GET | `/api/v1/admin/health` | System health check |
 
 ---
 
@@ -294,11 +293,11 @@ cd frontend && npm run dev
 
 # Testing
 npm test                # Run all tests
-cd backend && npm run test
-cd frontend && npm run test
+npm run test:e2e        # Playwright E2E
+cd backend && npm run test:cov
 
 # Database
-npm run db:migrate      # Run TypeORM migrations
+npm run db:migrate      # Run TypeORM migrations (requires data-source.ts)
 npm run db:seed         # Seed initial data
 npm run db:studio       # Open TypeORM studio
 
@@ -311,13 +310,30 @@ docker-compose logs -f  # View logs
 
 ## Anti-Patterns (THIS PROJECT)
 
-- **NEVER** hard delete data → use `deleted_at`
-- **NEVER** bypass RLS → always filter by tenant
-- **NEVER** expose raw TypeORM entities → use DTOs
-- **NEVER** skip validation → use class-validator DTOs
-- **NEVER** embed secrets in frontend → use env vars only
-- **NEVER** use `float` for money → use `decimal` type
-- **NEVER** use `any` type in TypeScript → use proper types
+### Core NEVER Rules
+| Rule | Why |
+|------|-----|
+| **NEVER hard delete data** → use `deleted_at` | Audit trail, recovery, double-entry consistency |
+| **NEVER bypass RLS** → always filter by tenant | Multi-tenant security isolation |
+| **NEVER use `float` for money** → use `decimal` type | Floating-point rounding errors |
+| **NEVER use `any` type** → use proper types | Type safety, maintainability |
+| **NEVER expose raw TypeORM entities** → use DTOs | API contract stability |
+| **NEVER skip validation** → use class-validator DTOs | Data integrity |
+
+### Critical Issues
+| Issue | Location | Impact |
+|-------|----------|--------|
+| Giant TDD test | `backend/src/comprehensive.tdd.spec.ts` (1012 lines) | Tests ALL services together - single responsibility violation |
+| Missing `data-source.ts` | `backend/src/config/` | Migration CLI commands fail |
+| `synchronize: true` | `app.module.ts` | Dangerous for production |
+| Default secrets in Dockerfiles | `frontend/frontend/Dockerfile`, `docker-compose.yml` | Security risk if used in production |
+| No frontend unit tests | `frontend/tests/` | Missing component/hook tests |
+
+### Non-Standard Patterns
+- **Chinese comments** in GitHub Actions and some test files
+- **Non-standard ports**: Backend 8067, Frontend 8068 (not 3000/3001)
+- **Two Playwright configs**: Root (port 8068, 3 browsers) + frontend (port 3000, 7 browsers + mobile)
+- **TypeScript strictness mismatch**: Frontend strict, backend relaxed
 
 ---
 
@@ -326,13 +342,15 @@ docker-compose logs -f  # View logs
 1. **Tenant isolation:** Middleware sets `app.current_tenant_id` for RLS
 2. **Exchange rates:** Historical rates stored per-date; latest rates cached
 3. **Account hierarchy:** `path` computed column, `depth` tracked for queries
-4. **Journal balance:** Debits must equal credits; validated before save
+4. **Journal balance:** Debits must equal credits, validated before save
 5. **Provider plugins:** Hot-reloaded on config change; test before use
 6. **Currency decimals:** Fiat = 2 decimals, Crypto = 8 decimals
 7. **TypeORM synchronize:** Currently `true` - migrations not yet implemented
 8. **Missing data-source.ts:** Migration CLI commands require config file
 9. **Non-standard ports:** Backend 8067, Frontend 8068 (not 3000/3001)
 10. **No shared types:** Shared directory exists but not populated
+11. **JWT token in localStorage:** `auth-options.ts` stores token in client storage (security concern)
+12. **SeedsModule in production:** `SeedsModule` imported in app.module.ts (typically dev-only)
 
 ---
 
@@ -355,6 +373,25 @@ docker-compose logs -f  # View logs
 - Backend plugins directory as mounted volume
 - Resource limits in development compose
 
+### Testing
+- CI-aware Playwright with mobile viewport testing
+- Tenant context helper for RLS testing
+- Page Object Model for E2E tests
+
+---
+
+## Missing/Issues to Address
+
+| Issue | Location | Impact | Priority |
+|-------|----------|--------|----------|
+| Missing `data-source.ts` | `backend/src/config/` | Migration CLI commands fail | **Critical** |
+| Default secrets in Dockerfiles | `Dockerfile`, `docker-compose.yml` | Security risk in production | **Critical** |
+| Giant TDD test file | `backend/src/comprehensive.tdd.spec.ts` | Maintenance burden | High |
+| No frontend unit tests | `frontend/tests/` | Missing test coverage | Medium |
+| Duplicate Playwright configs | Root + frontend | Confusing which to run | Medium |
+| TypeScript strictness mismatch | `tsconfig.json` files | Inconsistent code quality | Low |
+| Chinese comments in CI | `.github/workflows/` | Confusion for contributors | Low |
+
 ---
 
 ## Notes
@@ -363,14 +400,4 @@ docker-compose logs -f  # View logs
 - All admin actions logged to `admin_audit_logs` table
 - Rate providers can be JS plugins or REST API configs
 - Reports generated on-demand; can be cached for 1 hour
-
----
-
-## Missing/Issues to Address
-
-| Issue | Location | Impact |
-|-------|----------|--------|
-| Missing `data-source.ts` | `backend/src/config/` | Migration CLI commands fail |
-| No `shared/` types | Root | Type duplication between frontend/backend |
-| `synchronize: true` | `app.module.ts` | Dangerous for production |
-| No migrations | `database/migrations/` | No schema version control |
+- Root page uses `dynamic()` with `ssr: false` to avoid useSession SSR issues

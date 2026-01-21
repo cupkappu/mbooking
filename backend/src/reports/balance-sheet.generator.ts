@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Account, AccountType } from '../accounts/account.entity';
-import { JournalEntry } from '../journal/journal-entry.entity';
-import { JournalLine } from '../journal/journal-line.entity';
+import { QueryService } from '../query/query.service';
+import { TenantsService } from '../tenants/tenants.service';
 
 interface BalanceSheetSection {
   name: string;
@@ -14,6 +14,7 @@ interface BalanceSheetSection {
     amount: number;
     currency: string;
     depth: number;
+    converted_amount?: number;
   }>;
   total: number;
 }
@@ -40,8 +41,8 @@ export class BalanceSheetGenerator {
   constructor(
     @InjectRepository(Account)
     private accountRepository: Repository<Account>,
-    @InjectRepository(JournalLine)
-    private journalLineRepository: Repository<JournalLine>,
+    private queryService: QueryService,
+    private tenantsService: TenantsService,
   ) {}
 
   async generate(tenantId: string, asOfDate: Date, depth: number = 2, currency: string = 'USD'): Promise<BalanceSheet> {
@@ -49,23 +50,53 @@ export class BalanceSheetGenerator {
       where: { tenant_id: tenantId, is_active: true },
     });
 
-    const balances = await this.calculateBalances(tenantId, asOfDate);
+    // Get tenant's default currency
+    let defaultCurrency = 'USD';
+    try {
+      const tenant = await this.tenantsService.findById(tenantId);
+      defaultCurrency = tenant.settings?.default_currency || 'USD';
+    } catch {}
+
+    // Get balances from QueryService using default currency
+    const balancesResult = await this.queryService.getBalances({
+      date_range: { from: '1970-01-01', to: asOfDate.toISOString().split('T')[0] },
+      include_subtree: true,
+    });
+
+    // Build maps: original amounts and converted totals (in default currency)
+    const originalAmountMap = new Map<string, { amount: number; currency: string }>();
+    const convertedAmountMap = new Map<string, number>();
+
+    for (const balance of balancesResult.balances) {
+      // Get original amount (sum of all currencies)
+      const originalAmount = balance.currencies.reduce((sum, c) => sum + c.amount, 0);
+      const primaryCurrency = balance.currencies[0]?.currency || defaultCurrency;
+      originalAmountMap.set(balance.account.id, { amount: originalAmount, currency: primaryCurrency });
+
+      // Get converted total (already in default currency)
+      convertedAmountMap.set(balance.account.id, balance.converted_total || 0);
+    }
 
     const sectionItems = (type: AccountType, depth: number) => {
       return accounts
         .filter((a) => a.type === type && a.depth <= depth)
-        .map((account) => ({
-          path: account.path,
-          name: account.name,
-          amount: balances.get(account.id) || 0,
-          currency,
-          depth: account.depth,
-        }))
+        .map((account) => {
+          const original = originalAmountMap.get(account.id) || { amount: 0, currency: defaultCurrency };
+          return {
+            path: account.path,
+            name: account.name,
+            amount: original.amount,
+            currency: original.currency,
+            depth: account.depth,
+            converted_amount: convertedAmountMap.get(account.id),
+          };
+        })
         .sort((a, b) => a.path.localeCompare(b.path));
     };
 
+    // Calculate totals using converted amounts (in default currency)
     const calculateTotal = (items: any[]) => {
-      return items.reduce((sum, item) => sum + item.amount, 0);
+      return items.reduce((sum, item) => sum + (item.converted_amount || 0), 0);
     };
 
     const assetsItems = sectionItems(AccountType.ASSETS, depth);
@@ -109,22 +140,5 @@ export class BalanceSheetGenerator {
         currency,
       },
     };
-  }
-
-  private async calculateBalances(tenantId: string, asOfDate: Date): Promise<Map<string, number>> {
-    const lines = await this.journalLineRepository
-      .createQueryBuilder('line')
-      .innerJoin('line.journal_entry', 'entry')
-      .where('line.tenant_id = :tenantId', { tenantId })
-      .andWhere('entry.date <= :asOfDate', { asOfDate })
-      .select(['line.account_id', 'SUM(line.converted_amount) as total'])
-      .groupBy('line.account_id')
-      .getRawMany();
-
-    const balances = new Map<string, number>();
-    for (const line of lines) {
-      balances.set(line.line_account_id, parseFloat(line.total) || 0);
-    }
-    return balances;
   }
 }

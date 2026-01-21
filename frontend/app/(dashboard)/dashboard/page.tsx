@@ -1,8 +1,8 @@
 'use client';
 
-import { useDashboardSummary } from '@/hooks/use-api';
+import { useDashboardSummary, useDefaultCurrency } from '@/hooks/use-api';
 import { useCurrencies } from '@/hooks/use-currencies';
-import { formatCurrency, formatCurrencyWithSign, formatMultiCurrency, setCurrenciesCache } from '@/lib/currency-formatter';
+import { formatCurrency, setCurrenciesCache } from '@/lib/currency-formatter';
 
 function formatNumber(amount: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -50,11 +50,13 @@ function SummaryCard({
   amounts,
   convertedAmount,
   isLoading,
+  defaultCurrency,
 }: {
   label: string;
   amounts: { [currency: string]: number } | undefined | null;
   convertedAmount?: number | undefined | null;
   isLoading: boolean;
+  defaultCurrency?: string;
 }) {
   return (
     <div className="p-6 bg-card rounded-lg border">
@@ -66,7 +68,7 @@ function SummaryCard({
           <MultiCurrencyAmount amounts={amounts} />
           {convertedAmount !== undefined && convertedAmount !== null && !Number.isNaN(convertedAmount) && (
             <p className="text-xl font-bold mt-1">
-              = {formatCurrency(convertedAmount as number)}
+              = {formatCurrency(convertedAmount as number, defaultCurrency || 'USD')}
             </p>
           )}
         </div>
@@ -77,6 +79,7 @@ function SummaryCard({
 
 function TransactionItem({
   transaction,
+  defaultCurrency,
 }: {
   transaction: {
     id: string;
@@ -85,6 +88,7 @@ function TransactionItem({
     amount: number | undefined | null;
     currency?: string;
   };
+  defaultCurrency?: string;
 }) {
   return (
     <div className="flex items-center justify-between py-3 border-b last:border-0">
@@ -97,7 +101,7 @@ function TransactionItem({
           (transaction.amount ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
         }`}
       >
-        {formatCurrency(transaction.amount ?? 0, transaction.currency || 'USD')}
+        {formatCurrency(transaction.amount ?? 0, transaction.currency || defaultCurrency || 'USD')}
       </span>
     </div>
   );
@@ -106,6 +110,7 @@ function TransactionItem({
 export default function DashboardPage() {
   const { data: summary, isLoading, error } = useDashboardSummary();
   const { data: currencies } = useCurrencies();
+  const { data: defaultCurrency } = useDefaultCurrency();
 
   if (currencies) {
     setCurrenciesCache(currencies);
@@ -138,18 +143,21 @@ export default function DashboardPage() {
           amounts={summary?.assets}
           convertedAmount={summary?.converted_assets ?? undefined}
           isLoading={isLoading}
+          defaultCurrency={defaultCurrency}
         />
         <SummaryCard
           label="Total Liabilities"
           amounts={summary?.liabilities}
           convertedAmount={summary?.converted_liabilities ?? undefined}
           isLoading={isLoading}
+          defaultCurrency={defaultCurrency}
         />
         <SummaryCard
           label="Net Worth"
           amounts={undefined}
           convertedAmount={summary?.netWorth ?? undefined}
           isLoading={isLoading}
+          defaultCurrency={defaultCurrency}
         />
       </div>
 
@@ -164,7 +172,7 @@ export default function DashboardPage() {
         ) : summary?.recentTransactions && summary.recentTransactions.length > 0 ? (
           <div className="space-y-1">
             {summary.recentTransactions.map((transaction) => (
-              <TransactionItem key={transaction.id} transaction={transaction} />
+              <TransactionItem key={transaction.id} transaction={transaction} defaultCurrency={defaultCurrency} />
             ))}
           </div>
         ) : (

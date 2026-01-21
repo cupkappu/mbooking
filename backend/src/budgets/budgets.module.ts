@@ -9,9 +9,13 @@ import { BudgetsService } from './budgets.service';
 import { BudgetAlertService } from './budget-alert.service';
 import { BudgetTemplateService } from './budget-template.service';
 import { BudgetsController } from './budgets.controller';
+import { QueryModule } from '../query/query.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Budget, BudgetTemplate, BudgetAlert, JournalLine, Account])],
+  imports: [
+    TypeOrmModule.forFeature([Budget, BudgetTemplate, BudgetAlert, JournalLine, Account]),
+    QueryModule,
+  ],
   controllers: [BudgetsController],
   providers: [BudgetsService, BudgetAlertService, BudgetTemplateService],
   exports: [BudgetsService, BudgetAlertService, BudgetTemplateService],

@@ -46,6 +46,7 @@ export interface AccountBalance {
   account: Account;
   currencies: CurrencyBalance[];
   converted_amount?: number;
+  converted_total?: number; // 所有货币转换成 default currency 后加总
   subtree_currencies?: CurrencyBalance[];
   converted_subtree_total?: number;
   converted_subtree_currency?: string;
@@ -181,6 +182,25 @@ export class QueryService {
           result.currencies = currencyBalances;
         }
 
+        // Calculate converted_total: all currencies converted to default currency and summed
+        const defaultCurrency = await this.getDefaultCurrency();
+        let convertedTotal = 0;
+        for (const balance of currencyBalances) {
+          if (balance.currency === defaultCurrency) {
+            convertedTotal += balance.amount;
+          } else {
+            const rate = await this.rateEngine.getRate(balance.currency, defaultCurrency, {
+              date: query.specific_date ? new Date(query.specific_date) : undefined,
+            });
+            if (rate) {
+              convertedTotal += balance.amount * rate.rate;
+            } else {
+              convertedTotal += balance.amount;
+            }
+          }
+        }
+        result.converted_total = convertedTotal;
+
         return result;
       }),
     );
@@ -306,9 +326,20 @@ export class QueryService {
       take: 10,
     });
 
-    const recentTransactions = recentEntries.map(entry => {
-      // Calculate net amount for the entry (sum of positive amounts in converted currency)
-      const netAmount = entry.lines.reduce((sum, line) => sum + (line.amount > 0 ? line.converted_amount || line.amount : 0), 0);
+    const recentTransactions = await Promise.all(recentEntries.map(async (entry) => {
+      // Calculate net amount for the entry using converted values
+      let netAmount = 0;
+      for (const line of entry.lines) {
+        if (line.amount > 0) {
+          // Calculate converted amount on the fly
+          const rate = await this.rateEngine.getRate(line.currency, defaultCurrency, {});
+          if (rate) {
+            netAmount += line.amount * rate.rate;
+          } else {
+            netAmount += line.amount;
+          }
+        }
+      }
       // Get the primary currency of this entry (use first line's currency)
       const primaryCurrency = entry.lines?.[0]?.currency || defaultCurrency;
       return {
@@ -318,7 +349,7 @@ export class QueryService {
         amount: Math.round(netAmount * 100) / 100,
         currency: primaryCurrency,
       };
-    });
+    }));
 
     return {
       assets: assetsByCurrency,
@@ -348,7 +379,7 @@ export class QueryService {
   private async calculateAccountBalance(accountId: string, tenantId: string, dateRange?: { from: string; to: string }): Promise<CurrencyBalance[]> {
     const query = this.journalLineRepository
       .createQueryBuilder('line')
-      .select(['line.currency', 'SUM(COALESCE(line.converted_amount, line.amount)) as total'])
+      .select(['line.currency', 'SUM(line.amount) as total'])
       .where('line.account_id = :accountId', { accountId })
       .andWhere('line.tenant_id = :tenantId', { tenantId })
       .groupBy('line.currency');
