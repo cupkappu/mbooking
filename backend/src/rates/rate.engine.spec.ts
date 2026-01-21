@@ -36,6 +36,7 @@ describe('RateEngine TDD', () => {
     rate: 7.785,
     date: new Date('2025-01-15'),
     fetched_at: new Date('2025-01-15'),
+    provider: null as any,
   };
 
   const mockProvider: Provider = {

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 import { ExchangeRate } from './exchange-rate.entity';
 import { Provider, ProviderType } from './provider.entity';
 
@@ -46,59 +46,94 @@ export interface GraphPathfindingResult {
 // ============================================================================
 
 class PriorityQueue<T> {
-  private items: Map<T, number> = new Map();
-
-  constructor() {}
+  // Min-heap priority queue backed by an array and an index map for O(log n) ops
+  private heap: Array<{ item: T; priority: number }> = [];
+  private indexMap: Map<T, number> = new Map();
 
   enqueue(item: T, priority: number): void {
-    this.items.set(item, priority);
+    if (this.indexMap.has(item)) {
+      this.update(item, priority);
+      return;
+    }
+    const node = { item, priority };
+    this.heap.push(node);
+    const idx = this.heap.length - 1;
+    this.indexMap.set(item, idx);
+    this.siftUp(idx);
   }
 
   dequeue(): [T, number] | null {
-    if (this.items.size === 0) return null;
-
-    let minPriority = Infinity;
-    let minItem: T | null = null;
-
-    for (const [item, priority] of this.items) {
-      if (priority < minPriority) {
-        minPriority = priority;
-        minItem = item;
-      }
+    if (this.heap.length === 0) return null;
+    const root = this.heap[0];
+    const last = this.heap.pop()!;
+    this.indexMap.delete(root.item);
+    if (this.heap.length > 0) {
+      this.heap[0] = last;
+      this.indexMap.set(last.item, 0);
+      this.siftDown(0);
     }
-
-    if (minItem !== null) {
-      this.items.delete(minItem);
-      return [minItem, minPriority];
-    }
-
-    return null;
+    return [root.item, root.priority];
   }
 
   update(item: T, priority: number): void {
-    if (this.items.has(item)) {
-      this.items.set(item, priority);
-    }
+    const idx = this.indexMap.get(item);
+    if (idx === undefined) return;
+    const old = this.heap[idx].priority;
+    this.heap[idx].priority = priority;
+    if (priority < old) this.siftUp(idx);
+    else this.siftDown(idx);
   }
 
   has(item: T): boolean {
-    return this.items.has(item);
+    return this.indexMap.has(item);
   }
 
   isEmpty(): boolean {
-    return this.items.size === 0;
+    return this.heap.length === 0;
   }
 
   size(): number {
-    return this.items.size;
+    return this.heap.length;
   }
 
   static from<T>(items: Map<T, number>): PriorityQueue<T> {
     const pq = new PriorityQueue<T>();
-    for (const [item, priority] of items) {
-      pq.enqueue(item, priority);
-    }
+    for (const [item, priority] of items) pq.enqueue(item, priority);
     return pq;
+  }
+
+  private siftUp(idx: number) {
+    let i = idx;
+    while (i > 0) {
+      const parent = Math.floor((i - 1) / 2);
+      if (this.heap[parent].priority <= this.heap[i].priority) break;
+      this.swap(i, parent);
+      i = parent;
+    }
+  }
+
+  private siftDown(idx: number) {
+    let i = idx;
+    const n = this.heap.length;
+    while (true) {
+      const left = 2 * i + 1;
+      const right = 2 * i + 2;
+      let smallest = i;
+      if (left < n && this.heap[left].priority < this.heap[smallest].priority) smallest = left;
+      if (right < n && this.heap[right].priority < this.heap[smallest].priority) smallest = right;
+      if (smallest === i) break;
+      this.swap(i, smallest);
+      i = smallest;
+    }
+  }
+
+  private swap(a: number, b: number) {
+    const ta = this.heap[a];
+    const tb = this.heap[b];
+    this.heap[a] = tb;
+    this.heap[b] = ta;
+    this.indexMap.set(ta.item, b);
+    this.indexMap.set(tb.item, a);
   }
 }
 
@@ -110,7 +145,11 @@ class PriorityQueue<T> {
 export class RateGraphEngine {
   private readonly logger = new Logger(RateGraphEngine.name);
   private graphCache: Map<string, { graph: RateGraph; expiresAt: Date }> = new Map();
+  private pathCache: Map<string, { result: GraphPathfindingResult; expiresAt: Date }> = new Map();
+  private providerCache: Map<string, { provider: Provider; expiresAt: Date }> = new Map();
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly PATH_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes for path results
+  private readonly PROVIDER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes for providers
 
   constructor(
     @InjectRepository(ExchangeRate)
@@ -150,12 +189,18 @@ export class RateGraphEngine {
     }
 
     const date = options.date || new Date();
-    const cacheKey = this.getCacheKey(date);
+    
+    // Check path cache first
+    const pathCacheKey = `${fromUpper}:${toUpper}:${date.toISOString().split('T')[0]}:${options.providerId || 'all'}`;
+    const cachedPath = this.pathCache.get(pathCacheKey);
+    if (cachedPath && cachedPath.expiresAt > new Date()) {
+      return cachedPath.result;
+    }
 
     // Try direct rate first (from cache)
     const directEdge = await this.getDirectEdge(fromUpper, toUpper, date);
     if (directEdge) {
-      return {
+      const result = {
         from: fromUpper,
         to: toUpper,
         rate: directEdge.rate,
@@ -165,6 +210,14 @@ export class RateGraphEngine {
         hops: 1,
         isInferred: false,
       };
+      
+      // Cache the direct rate result
+      this.pathCache.set(pathCacheKey, {
+        result,
+        expiresAt: new Date(Date.now() + this.PATH_CACHE_TTL_MS),
+      });
+      
+      return result;
     }
 
     // Build graph and find path
@@ -186,7 +239,7 @@ export class RateGraphEngine {
       totalRate *= edge.rate;
     }
 
-    return {
+    const result = {
       from: fromUpper,
       to: toUpper,
       rate: totalRate,
@@ -196,6 +249,14 @@ export class RateGraphEngine {
       hops: pathResult.hops,
       isInferred: true,
     };
+    
+    // Cache the path result
+    this.pathCache.set(pathCacheKey, {
+      result,
+      expiresAt: new Date(Date.now() + this.PATH_CACHE_TTL_MS),
+    });
+    
+    return result;
   }
 
   /**
@@ -229,6 +290,97 @@ export class RateGraphEngine {
       path: rateResult?.path,
       hops: rateResult?.hops,
     };
+  }
+
+  /**
+   * Get multiple rates in batch (optimized for multiple conversions)
+   */
+  async getRatesBatch(
+    conversions: Array<{ from: string; to: string; date?: Date; providerId?: string }>
+  ): Promise<Map<string, number>> {
+    if (conversions.length === 0) {
+      return new Map();
+    }
+
+    // Group conversions by date and provider
+    const conversionsByKey = new Map<string, Array<{ from: string; to: string; index: number }>>();
+    const results = new Map<string, number>();
+    
+    conversions.forEach((conv, index) => {
+      const date = conv.date || new Date();
+      const key = `${date.toISOString().split('T')[0]}:${conv.providerId || 'all'}`;
+      
+      if (!conversionsByKey.has(key)) {
+        conversionsByKey.set(key, []);
+      }
+      conversionsByKey.get(key)!.push({ from: conv.from, to: conv.to, index });
+    });
+
+    // Process each group
+    for (const [key, groupConversions] of conversionsByKey) {
+      const [dateStr, providerId] = key.split(':');
+      const date = new Date(dateStr);
+      const provider = providerId === 'all' ? undefined : providerId;
+      
+      // Build graph once for this date/provider group
+      const graph = await this.buildGraph(date, provider);
+      
+      // Process all conversions in this group
+      for (const conv of groupConversions) {
+        const fromUpper = conv.from.toUpperCase();
+        const toUpper = conv.to.toUpperCase();
+        
+        if (fromUpper === toUpper) {
+          results.set(`${conv.from}:${conv.to}:${dateStr}`, 1);
+          continue;
+        }
+        
+        // Check path cache first
+        const pathCacheKey = `${fromUpper}:${toUpper}:${dateStr}:${providerId}`;
+        const cachedPath = this.pathCache.get(pathCacheKey);
+        if (cachedPath && cachedPath.expiresAt > new Date()) {
+          results.set(`${conv.from}:${conv.to}:${dateStr}`, cachedPath.result.rate);
+          continue;
+        }
+        
+        // Find path
+        const pathResult = this.findBestPath(graph, fromUpper, toUpper, {
+          maxHops: 5,
+          minConfidence: 0.1,
+        });
+        
+        if (pathResult) {
+          // Calculate total rate
+          let totalRate = 1;
+          for (const edge of pathResult.edges) {
+            totalRate *= edge.rate;
+          }
+          
+          results.set(`${conv.from}:${conv.to}:${dateStr}`, totalRate);
+          
+          // Cache the result
+          const result = {
+            from: fromUpper,
+            to: toUpper,
+            rate: totalRate,
+            timestamp: new Date(),
+            source: 'graph-inference',
+            path: pathResult.path,
+            hops: pathResult.hops,
+            isInferred: true,
+          };
+          
+          this.pathCache.set(pathCacheKey, {
+            result,
+            expiresAt: new Date(Date.now() + this.PATH_CACHE_TTL_MS),
+          });
+        } else {
+          results.set(`${conv.from}:${conv.to}:${dateStr}`, 1);
+        }
+      }
+    }
+    
+    return results;
   }
 
   /**
@@ -302,38 +454,33 @@ export class RateGraphEngine {
       where: providerWhere,
     });
 
-    // Get cached rates
-    const cachedRates = await this.rateRepository.find({
-      where: { date: LessThanOrEqual(date) },
-      order: { fetched_at: 'DESC' },
-    });
+    // Get cached rates: fetch only the latest fetched_at per currency pair (DB-side dedupe)
+    const dateStr = date.toISOString().split('T')[0];
+    const cachedRates: any[] = await this.rateRepository.query(
+      `
+      SELECT DISTINCT ON (from_currency, to_currency) r.*
+      FROM exchange_rates r
+      WHERE date <= $1
+      ORDER BY from_currency, to_currency, fetched_at DESC
+      `,
+      [dateStr],
+    );
 
-    // Add edges from cached rates (de-duplicate by keeping most recent)
-    const rateMap = new Map<string, ExchangeRate>();
     for (const rate of cachedRates) {
-      const key = `${rate.from_currency}:${rate.to_currency}`;
-      if (!rateMap.has(key)) {
-        rateMap.set(key, rate);
-      }
-    }
-
-    for (const rate of rateMap.values()) {
-      const confidence = this.calculateConfidence(rate.fetched_at);
+      const confidence = this.calculateConfidence(new Date(rate.fetched_at));
       this.addEdgeToGraph(graph, {
         from: rate.from_currency,
         to: rate.to_currency,
         rate: Number(rate.rate),
         providerId: rate.provider_id,
         providerName: 'cached',
-        timestamp: rate.fetched_at,
+        timestamp: new Date(rate.fetched_at),
         confidence,
       });
     }
 
-    // Fetch live rates from providers
-    for (const provider of providers) {
-      await this.fetchProviderRates(graph, provider, date);
-    }
+    // Fetch live rates from providers in parallel (providers are typically few)
+    await Promise.all(providers.map(p => this.fetchProviderRates(graph, p, date)));
 
     // Cache the graph
     this.graphCache.set(cacheKey, {
@@ -390,22 +537,18 @@ export class RateGraphEngine {
           // e.g., CoinGecko gives BTC price in USD
           const baseCurrencies = ['USD', 'EUR', 'GBP', 'CNY'];
           
-          for (const base of baseCurrencies) {
+          // Parallelize per-base fetches for this currency
+          await Promise.all(baseCurrencies.map(async (base) => {
             try {
               const rates = await plugin.fetchRates([currency], base);
-              
+
               for (const [rateKey, rateValue] of Object.entries(rates)) {
-                // Parse rate key like "USD/BTC" or "BTC/USD"
                 const [rateFrom, rateTo] = rateKey.split('/');
                 const rateNum = Number(rateValue);
-                
                 if (isNaN(rateNum)) continue;
-                
+
                 if (rateFrom === base && rateTo === currency) {
-                  // Rate is base/crypto, meaning 1 base = X crypto
-                  // We need crypto/base = 1 / rateValue
                   const cryptoToBase = 1 / rateNum;
-                  
                   this.addEdgeToGraph(graph, {
                     from: currency,
                     to: base,
@@ -416,7 +559,6 @@ export class RateGraphEngine {
                     confidence: 0.95,
                   });
                 } else if (rateFrom === currency && rateTo === base) {
-                  // Rate is crypto/base, meaning 1 crypto = X base
                   this.addEdgeToGraph(graph, {
                     from: currency,
                     to: base,
@@ -431,7 +573,7 @@ export class RateGraphEngine {
             } catch {
               // Ignore errors for individual rate fetches
             }
-          }
+          }));
         }
       }
     } catch (error) {
@@ -482,26 +624,22 @@ export class RateGraphEngine {
     to: string,
     date: Date
   ): Promise<RateEdge | null> {
-    // Check cache first
-    const cachedRate = await this.rateRepository.findOne({
-      where: {
-        from_currency: from,
-        to_currency: to,
-        date: date,
-      },
-    });
+    // Use joined query to avoid N+1 problem
+    const cachedRate = await this.rateRepository
+      .createQueryBuilder('rate')
+      .leftJoinAndSelect('rate.provider', 'provider')
+      .where('rate.from_currency = :from', { from })
+      .andWhere('rate.to_currency = :to', { to })
+      .andWhere('rate.date = :date', { date })
+      .getOne();
 
     if (cachedRate) {
-      const provider = await this.providerRepository.findOne({
-        where: { id: cachedRate.provider_id },
-      });
-
       return {
         from,
         to,
         rate: Number(cachedRate.rate),
         providerId: cachedRate.provider_id,
-        providerName: provider?.name || 'unknown',
+        providerName: cachedRate.provider?.name || 'unknown',
         timestamp: cachedRate.fetched_at,
         confidence: this.calculateConfidence(cachedRate.fetched_at),
       };
@@ -545,7 +683,9 @@ export class RateGraphEngine {
     const queue = new PriorityQueue<string>();
     queue.enqueue(from, 0);
 
-    let hops = 0;
+    // Track depths (hop counts) per node to enforce maxHops during search
+    const depths = new Map<string, number>();
+    depths.set(from, 0);
 
     while (!queue.isEmpty()) {
       const [current, currentDist] = queue.dequeue()!;
@@ -555,18 +695,8 @@ export class RateGraphEngine {
         continue;
       }
 
-      // Count hops from start
-      if (current !== from) {
-        const edge = edgeUsed.get(current);
-        if (edge) {
-          hops++;
-        }
-      }
-
-      // Stop if we've reached target with too many hops
-      if (current === to && hops > maxHops) {
-        return null;
-      }
+      const currentDepth = depths.get(current) ?? 0;
+      if (currentDepth > maxHops) continue;
 
       if (current === to) {
         break;
@@ -577,6 +707,10 @@ export class RateGraphEngine {
 
       for (const [next, edge] of edges) {
         if (edge.confidence < minConfidence) continue;
+
+        // Enforce hop limit
+        const newDepth = currentDepth + 1;
+        if (newDepth > maxHops) continue;
 
         // Calculate new distance (using log for numerical stability)
         // log(a * b) = log(a) + log(b)
@@ -590,6 +724,7 @@ export class RateGraphEngine {
           distances.set(next, newDist);
           predecessors.set(next, current);
           edgeUsed.set(next, edge);
+          depths.set(next, newDepth);
           queue.enqueue(next, newDist);
         }
       }
@@ -674,16 +809,18 @@ export class RateGraphEngine {
         for (const [next, edge] of edges) {
           // Prevent cycles by checking visited
           if (!visited.has(next)) {
+            currentPath.push(next);
             this.findAllPaths(
               graph,
               next,
               target,
               visited,
-              [...currentPath, next],
+              currentPath,
               results,
               maxResults,
               maxHops
             );
+            currentPath.pop();
           }
         }
       }
@@ -716,6 +853,29 @@ export class RateGraphEngine {
    */
   private getCacheKey(date: Date): string {
     return date.toISOString().split('T')[0];
+  }
+
+  /**
+   * Get provider with caching
+   */
+  private async getProvider(providerId: string): Promise<Provider | null> {
+    const cached = this.providerCache.get(providerId);
+    if (cached && cached.expiresAt > new Date()) {
+      return cached.provider;
+    }
+    
+    const provider = await this.providerRepository.findOne({
+      where: { id: providerId },
+    });
+    
+    if (provider) {
+      this.providerCache.set(providerId, {
+        provider,
+        expiresAt: new Date(Date.now() + this.PROVIDER_CACHE_TTL_MS),
+      });
+    }
+    
+    return provider;
   }
 
   /**
@@ -759,18 +919,24 @@ export class RateGraphEngine {
     const toUpper = to.toUpperCase();
     const { fromDate, toDate } = options;
 
-    // Use graph engine to find paths for each day in range
-    const rates: number[] = [];
+    // Use graph engine to find paths for each day in range (parallel processing)
+    const dates: Date[] = [];
     let currentDate = new Date(fromDate);
     const endDate = new Date(toDate);
 
     while (currentDate <= endDate) {
-      const result = await this.getRate(fromUpper, toUpper, { date: currentDate });
-      if (result && result.rate > 0) {
-        rates.push(result.rate);
-      }
+      dates.push(new Date(currentDate));
       currentDate.setDate(currentDate.getDate() + 1);
     }
+
+    // Process dates in parallel
+    const ratePromises = dates.map(date => 
+      this.getRate(fromUpper, toUpper, { date })
+        .then(result => result?.rate || 0)
+    );
+
+    const rateResults = await Promise.all(ratePromises);
+    const rates = rateResults.filter(rate => rate > 0);
 
     if (rates.length === 0) {
       return {
@@ -828,28 +994,26 @@ export class RateGraphEngine {
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    const rates: Array<{
-      from: string;
-      to: string;
-      rate: number;
-      date: Date;
-      fetched_at: Date;
-      provider_id: string;
-    }> = [];
+    // Process dates in parallel for better performance
+    const ratePromises = dates.map(date => 
+      this.getRate(from.toUpperCase(), to.toUpperCase(), { date })
+        .then(result => {
+          if (result) {
+            return {
+              from: result.from,
+              to: result.to,
+              rate: result.rate,
+              date: date,
+              fetched_at: result.timestamp,
+              provider_id: result.source,
+            };
+          }
+          return null;
+        })
+    );
 
-    for (const date of dates) {
-      const result = await this.getRate(from.toUpperCase(), to.toUpperCase(), { date });
-      if (result) {
-        rates.push({
-          from: result.from,
-          to: result.to,
-          rate: result.rate,
-          date: date,
-          fetched_at: result.timestamp,
-          provider_id: result.source,
-        });
-      }
-    }
+    const rateResults = await Promise.all(ratePromises);
+    const rates = rateResults.filter((rate): rate is NonNullable<typeof rate> => rate !== null);
 
     return {
       rates,

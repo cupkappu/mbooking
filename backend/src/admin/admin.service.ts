@@ -17,6 +17,7 @@ import { Budget } from '../budgets/budget.entity';
 import { Provider, ProviderType } from '../rates/provider.entity';
 import { CurrenciesService } from '../currencies/currencies.service';
 import { CurrencyProviderService } from '../currencies/currency-provider.service';
+import { ProvidersService } from '../providers/providers.service';
 import { CreateCurrencyDto, UpdateCurrencyDto } from '../currencies/dto/currency.dto';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
@@ -106,6 +107,7 @@ export class AdminService {
     private providerRepository: Repository<Provider>,
     private currenciesService: CurrenciesService,
     public currencyProviderService: CurrencyProviderService,
+    private providersService: ProvidersService,
   ) {}
 
   // =========================================================================
@@ -553,10 +555,8 @@ export class AdminService {
     const startTime = Date.now();
 
     try {
-      // TODO: Implement actual provider test based on type
-      // For now, just simulate a test
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
+      // Call the actual provider test implementation
+      const result = await this.providersService.testConnection(providerId);
       const latency = Date.now() - startTime;
 
       await this.log(
@@ -565,11 +565,11 @@ export class AdminService {
         'provider',
         provider.id,
         null,
-        { success: true, latency },
+        { success: result.success, latency, message: result.message },
         ipAddress,
       );
 
-      return { success: true, message: 'Provider connection successful', latency };
+      return { success: result.success, message: result.message, latency };
     } catch (error: any) {
       await this.log(
         adminId,

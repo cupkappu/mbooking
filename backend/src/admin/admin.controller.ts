@@ -79,7 +79,7 @@ export class AdminController {
     @Param('id') id: string,
     @Body() body: { email?: string; name?: string; role?: string; is_active?: boolean },
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const user = await this.adminService.updateUser(
       id,
       body,
@@ -95,7 +95,7 @@ export class AdminController {
     @Req() req: RequestWithIp,
     @Param('id') id: string,
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     await this.adminService.disableUser(
       id,
       adminId,
@@ -109,7 +109,7 @@ export class AdminController {
     @Param('id') id: string,
     @Body() body: { new_password: string },
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     await this.adminService.resetPassword(
       id,
       body.new_password,
@@ -125,7 +125,7 @@ export class AdminController {
     @Body() body: BulkUserAction,
   ) {
     const tenantId = (req as any).user?.tenant_id || 'system';
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const result = await this.adminService.bulkUserAction(
       tenantId,
       body,
@@ -150,7 +150,7 @@ export class AdminController {
     @Req() req: RequestWithIp,
     @Body() body: Partial<SystemConfig>,
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const config = await this.adminService.updateSystemConfig(
       body,
       adminId,
@@ -194,7 +194,7 @@ export class AdminController {
       supported_currencies?: string[];
     },
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const provider = await this.adminService.createProvider(
       body,
       adminId,
@@ -209,7 +209,7 @@ export class AdminController {
     @Param('id') id: string,
     @Body() body: any,
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const provider = await this.adminService.updateProvider(
       id,
       body,
@@ -225,7 +225,7 @@ export class AdminController {
     @Req() req: RequestWithIp,
     @Param('id') id: string,
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     await this.adminService.deleteProvider(
       id,
       adminId,
@@ -238,7 +238,7 @@ export class AdminController {
     @Req() req: RequestWithIp,
     @Param('id') id: string,
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const provider = await this.adminService.toggleProvider(
       id,
       adminId,
@@ -252,7 +252,7 @@ export class AdminController {
     @Req() req: RequestWithIp,
     @Param('id') id: string,
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const result = await this.adminService.testProvider(
       id,
       adminId,
@@ -276,7 +276,7 @@ export class AdminController {
     @Req() req: RequestWithIp,
     @Body() body: CreateCurrencyDto,
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const currency = await this.adminService.createCurrency(
       body,
       adminId,
@@ -291,7 +291,10 @@ export class AdminController {
     @Param('code') code: string,
     @Body() body: UpdateCurrencyDto,
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
+    if (!adminId) {
+      throw new Error('User ID not found in request');
+    }
     const currency = await this.adminService.updateCurrency(
       code,
       body,
@@ -307,7 +310,7 @@ export class AdminController {
     @Req() req: RequestWithIp,
     @Param('code') code: string,
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     await this.adminService.deleteCurrency(
       code,
       adminId,
@@ -317,7 +320,7 @@ export class AdminController {
 
   @Post('currencies/seed')
   async seedCurrencies(@Req() req: RequestWithIp) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const result = await this.adminService.seedCurrencies(
       adminId,
       req.ip || req.headers?.['x-forwarded-for'],
@@ -428,7 +431,7 @@ export class AdminController {
     @Body() body: ExportParams,
   ) {
     const tenantId = (req as any).user?.tenant_id || 'system';
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const result = await this.adminService.exportData(tenantId, body, adminId);
 
     if (body.format === 'json') {
@@ -453,7 +456,7 @@ export class AdminController {
     @Req() req: RequestWithIp,
     @Body() body: any,
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const config = await this.adminService.updateSchedulerConfig(
       body,
       adminId,
@@ -467,7 +470,7 @@ export class AdminController {
     @Req() req: RequestWithIp,
     @Body() body: { provider_ids?: string[]; currencies?: string[] },
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const result = await this.adminService.triggerManualFetch(
       adminId,
       body,
@@ -497,7 +500,7 @@ export class AdminController {
     @Req() req: RequestWithIp,
     @Body() body: { filename: string; content: string },
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const result = await this.adminService.uploadPlugin(
       body.content,
       body.filename,
@@ -512,7 +515,7 @@ export class AdminController {
     @Req() req: RequestWithIp,
     @Param('id') id: string,
   ) {
-    const adminId = (req as any).user?.id;
+    const adminId = (req as any).user?.userId;
     const result = await this.adminService.reloadPlugin(
       id,
       adminId,

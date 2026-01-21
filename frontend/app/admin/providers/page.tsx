@@ -487,9 +487,58 @@ export default function AdminProvidersPage() {
             >
               {deleteProvider.isPending ? 'Deleting...' : 'Delete Provider'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Provider Dialog */}
+        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Provider</DialogTitle>
+              <DialogDescription>Update provider settings</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="My Rate Provider"
+                />
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="edit-is-active"
+                  checked={editForm.is_active}
+                  onCheckedChange={(checked) => setEditForm({ ...editForm, is_active: checked })}
+                />
+                <Label htmlFor="edit-is-active">Active</Label>
+              </div>
+              <div className="space-y-2">
+                <Label>Config (JSON)</Label>
+                <textarea
+                  className="w-full min-h-[120px] p-3 border rounded-md bg-background text-sm font-mono"
+                  value={editForm.config}
+                  onChange={(e) => setEditForm({ ...editForm, config: e.target.value })}
+                  placeholder='{"base_url": "https://api.example.com"}'
+                />
+                <p className="text-xs text-muted-foreground">
+                  JSON configuration object for the provider
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditDialog(false)}>Cancel</Button>
+              <Button
+                onClick={handleUpdateProvider}
+                disabled={!editForm.name || updateProvider.isPending}
+              >
+                {updateProvider.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }

@@ -1,5 +1,5 @@
 // API请求通过 Next.js 代理到后端
-// 所有请求自动添加 /api/v1 前缀，与后端路由匹配
+// 使用 NEXT_PUBLIC_API_URL 环境变量进行配置
 
 import { getSession } from 'next-auth/react';
 
@@ -29,7 +29,6 @@ class ApiClient {
       }
 
       // Fallback: fetch session directly from NextAuth API
-      // This is more reliable than getSession() hook
       const response = await fetch('/api/auth/session', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
@@ -38,7 +37,6 @@ class ApiClient {
       if (response.ok) {
         const session = await response.json();
         if (session?.accessToken) {
-          // Cache it for future use
           try {
             localStorage.setItem('accessToken', session.accessToken);
           } catch (e) {
@@ -55,7 +53,7 @@ class ApiClient {
   }
 
   async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    // 自动添加 /api/v1 前缀
+    // 通过 Next.js 代理，自动添加 /api/v1 前缀
     const path = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
     const url = `/api/v1/${path}`;
     

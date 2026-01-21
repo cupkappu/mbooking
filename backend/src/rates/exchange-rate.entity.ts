@@ -1,13 +1,21 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index, ManyToOne, JoinColumn } from 'typeorm';
+import { Provider } from './provider.entity';
 
 @Entity('exchange_rates')
 @Index(['from_currency', 'to_currency', 'date'])
+@Index(['provider_id'])
+@Index(['fetched_at'])
+@Index(['date', 'fetched_at'])
 export class ExchangeRate {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ type: 'uuid' })
   provider_id: string;
+
+  @ManyToOne(() => Provider)
+  @JoinColumn({ name: 'provider_id' })
+  provider: Provider;
 
   @Column({ length: 10 })
   @Index()

@@ -76,6 +76,17 @@ export interface SchedulerConfig {
   base_currency: string;
 }
 
+export interface Plugin {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  status: 'loaded' | 'unloaded' | 'error';
+  file_path: string;
+  loaded_at?: string;
+  error?: string;
+}
+
 export function useAdminUsers(options?: { offset?: number; limit?: number }) {
   return useQuery({
     queryKey: ['admin-users', options],
@@ -280,7 +291,7 @@ export function useAdminHealth() {
   return useQuery({
     queryKey: ['admin-health'],
     queryFn: () => apiClient.get<HealthStatus>('/admin/health'),
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30000,
   });
 }
 
@@ -312,17 +323,6 @@ export function useDataExport() {
   });
 }
 
-export interface Plugin {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  status: 'loaded' | 'unloaded' | 'error';
-  file_path: string;
-  loaded_at?: string;
-  error?: string;
-}
-
 export function useAdminPlugins() {
   return useQuery({
     queryKey: ['admin-plugins'],
@@ -351,7 +351,6 @@ export function useSchedulerHistory() {
   });
 }
 
-// Simplified hook for getting available plugin files for provider creation
 export function useAvailablePlugins() {
   return useQuery({
     queryKey: ['admin-plugins-list'],
