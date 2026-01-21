@@ -150,6 +150,7 @@ export class RateGraphEngine {
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
   private readonly PATH_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes for path results
   private readonly PROVIDER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes for providers
+  private readonly LIVE_FETCH_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes: consider provider rates fresh
 
   constructor(
     @InjectRepository(ExchangeRate)
@@ -479,8 +480,29 @@ export class RateGraphEngine {
       });
     }
 
-    // Fetch live rates from providers in parallel (providers are typically few)
-    await Promise.all(providers.map(p => this.fetchProviderRates(graph, p, date)));
+    // Determine last fetched per-provider from cached rates so we can avoid
+    // calling providers that already have fresh cached data.
+    const providerLastFetched = new Map<string, Date>();
+    for (const rate of cachedRates) {
+      if (!rate.provider_id) continue;
+      const t = new Date(rate.fetched_at);
+      const prev = providerLastFetched.get(rate.provider_id);
+      if (!prev || t.getTime() > prev.getTime()) providerLastFetched.set(rate.provider_id, t);
+    }
+
+    // Filter providers to fetch: if a provider has recent cached rates (within
+    // LIVE_FETCH_THRESHOLD_MS) we skip fetching it. If a specific providerId was
+    // requested, always include that provider (caller likely wants fresh data).
+    const providersToFetch = providers.filter(p => {
+      if (providerId) return true;
+      const last = providerLastFetched.get(p.id);
+      if (!last) return true;
+      return (Date.now() - last.getTime()) > this.LIVE_FETCH_THRESHOLD_MS;
+    });
+
+    if (providersToFetch.length > 0) {
+      await Promise.all(providersToFetch.map(p => this.fetchProviderRates(graph, p, date)));
+    }
 
     // Cache the graph
     this.graphCache.set(cacheKey, {
