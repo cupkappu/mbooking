@@ -98,9 +98,7 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
-    if (activeTab === 'currencies' && currencies.length === 0) {
       fetchCurrencies();
-    }
   }, [activeTab, currencies.length]);
 
   const handleDeleteCurrency = async (code: string) => {

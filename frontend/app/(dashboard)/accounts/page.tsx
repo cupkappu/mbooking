@@ -27,11 +27,10 @@ import type { Currency } from '@/types/currency';
 import { BalanceCell } from '@/components/accounts/BalanceCell';
 import { TotalCell } from '@/components/accounts/TotalCell';
 import type { CurrencyBalance, AccountBalance } from '@/types';
+import { formatCurrency, setCurrenciesCache } from '@/lib/currency-formatter';
 
-function formatCurrency(amount: number, currency: string = 'USD'): string {
+function formatNumber(amount: number): string {
   return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
@@ -78,6 +77,12 @@ export default function AccountsPage() {
   const { data: currencies } = useCurrencies();
 
   const accountTypes = ['assets', 'liabilities', 'equity', 'revenue', 'expense'];
+
+  useEffect(() => {
+    if (currencies) {
+      setCurrenciesCache(currencies);
+    }
+  }, [currencies]);
 
   useEffect(() => {
     const savedCurrency = localStorage.getItem('accounts_display_currency');

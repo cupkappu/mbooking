@@ -6,6 +6,7 @@ import { JournalEntry } from '../journal/journal-entry.entity';
 import { JournalLine } from '../journal/journal-line.entity';
 import { RateEngine } from '../rates/rate.engine';
 import { TenantContext } from '../common/context/tenant.context';
+import { TenantsService } from '../tenants/tenants.service';
 
 export interface BalanceQuery {
   date_range?: { from: string; to: string };
@@ -53,8 +54,12 @@ export interface AccountBalance {
 export interface DashboardSummary {
   /** 按货币分别显示的资产余额，如 "1000 HKD + 50 USD" */
   assets: { [currency: string]: number };
+  /** 换算为默认货币后的资产总额 */
+  converted_assets: number;
   /** 按货币分别显示的负债余额 */
   liabilities: { [currency: string]: number };
+  /** 换算为默认货币后的负债总额 */
+  converted_liabilities: number;
   /** 换算为单一货币后的净资产（使用系统默认货币） */
   netWorth: number;
   recentTransactions: {
@@ -80,7 +85,18 @@ export class QueryService {
     @InjectRepository(JournalLine)
     private journalLineRepository: Repository<JournalLine>,
     private rateEngine: RateEngine,
+    private tenantsService: TenantsService,
   ) {}
+
+  private async getDefaultCurrency(): Promise<string> {
+    const tenantId = TenantContext.requireTenantId();
+    try {
+      const tenant = await this.tenantsService.findById(tenantId);
+      return tenant.settings?.default_currency || 'USD';
+    } catch {
+      return 'USD';
+    }
+  }
 
   async getBalances(query: BalanceQuery): Promise<{
     balances: AccountBalance[];
@@ -224,6 +240,8 @@ export class QueryService {
 
   async getSummary(): Promise<DashboardSummary> {
     const tenantId = TenantContext.requireTenantId();
+    const defaultCurrency = await this.getDefaultCurrency();
+
     // Get all accounts
     const accounts = await this.accountRepository.find({
       where: { tenant_id: tenantId, is_active: true },
@@ -249,10 +267,11 @@ export class QueryService {
       }
     }
 
-    // Calculate net worth in a single currency (using USD as default, or first available)
+    // Calculate converted totals in default currency
     const allCurrencies = Object.keys({ ...assetsByCurrency, ...liabilitiesByCurrency });
+    let convertedAssets = 0;
+    let convertedLiabilities = 0;
     let netWorth = 0;
-    const defaultCurrency = 'USD';
 
     for (const currency of allCurrencies) {
       const assets = assetsByCurrency[currency] || 0;
@@ -260,10 +279,14 @@ export class QueryService {
       const balance = assets - liabilities;
 
       if (currency === defaultCurrency) {
+        convertedAssets += assets;
+        convertedLiabilities += liabilities;
         netWorth += balance;
       } else {
         const rate = await this.rateEngine.getRate(currency, defaultCurrency, {});
         if (rate) {
+          convertedAssets += assets * rate.rate;
+          convertedLiabilities += liabilities * rate.rate;
           netWorth += balance * rate.rate;
         }
       }
@@ -281,7 +304,7 @@ export class QueryService {
       // Calculate net amount for the entry (sum of positive amounts in converted currency)
       const netAmount = entry.lines.reduce((sum, line) => sum + (line.amount > 0 ? line.converted_amount || line.amount : 0), 0);
       // Get the primary currency of this entry (use first line's currency)
-      const primaryCurrency = entry.lines?.[0]?.currency || 'USD';
+      const primaryCurrency = entry.lines?.[0]?.currency || defaultCurrency;
       return {
         id: entry.id,
         date: typeof entry.date === 'string' ? entry.date : entry.date.toISOString().split('T')[0],
@@ -293,7 +316,9 @@ export class QueryService {
 
     return {
       assets: assetsByCurrency,
+      converted_assets: Math.round(convertedAssets * 100) / 100,
       liabilities: liabilitiesByCurrency,
+      converted_liabilities: Math.round(convertedLiabilities * 100) / 100,
       netWorth: Math.round(netWorth * 100) / 100,
       recentTransactions,
     };

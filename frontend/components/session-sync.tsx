@@ -13,21 +13,43 @@ declare module 'next-auth' {
 export function SessionSync() {
   const { data: session } = useSession();
 
+  // Sync accessToken to localStorage on mount and when session changes
   useEffect(() => {
-    if (session?.accessToken) {
-      try {
-        localStorage.setItem('accessToken', session.accessToken);
-      } catch (e) {
-        // Silently handle storage errors
+    const syncAccessToken = () => {
+      const accessToken = session?.accessToken;
+      if (accessToken) {
+        try {
+          localStorage.setItem('accessToken', accessToken);
+        } catch (e) {
+          // Silently handle storage errors
+        }
+      } else {
+        // Clear token when session is null (logged out)
+        try {
+          localStorage.removeItem('accessToken');
+        } catch (e) {
+          // Silently handle storage errors
+        }
       }
-    } else {
-      // Clear token when session is null (logged out)
+    };
+
+    // Sync immediately on mount
+    syncAccessToken();
+
+    // Also sync when session changes - use a deep comparison of accessToken
+    const interval = setInterval(() => {
+      const currentAccessToken = session?.accessToken;
       try {
-        localStorage.removeItem('accessToken');
+        const storedToken = localStorage.getItem('accessToken');
+        if (currentAccessToken !== storedToken) {
+          syncAccessToken();
+        }
       } catch (e) {
-        // Silently handle storage errors
+        syncAccessToken();
       }
-    }
+    }, 100);
+
+    return () => clearInterval(interval);
   }, [session]);
 
   return null;

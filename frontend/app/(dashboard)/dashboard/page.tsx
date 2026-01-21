@@ -1,28 +1,8 @@
 'use client';
 
 import { useDashboardSummary } from '@/hooks/use-api';
-
-function formatCurrency(amount: number | undefined | null, currency: string = 'USD'): string {
-  // Handle undefined, null, or NaN
-  if (amount === undefined || amount === null || Number.isNaN(amount)) {
-    return '-';
-  }
-  const currencyLocales: { [key: string]: string } = {
-    USD: 'en-US',
-    HKD: 'en-HK',
-    CNY: 'zh-CN',
-    EUR: 'de-DE',
-    GBP: 'en-GB',
-    JPY: 'ja-JP',
-  };
-  const locale = currencyLocales[currency] || 'en-US';
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: currency,
-    minimumFractionDigits: currency === 'JPY' ? 0 : 2,
-    maximumFractionDigits: currency === 'JPY' ? 0 : 2,
-  }).format(amount);
-}
+import { useCurrencies } from '@/hooks/use-currencies';
+import { formatCurrency, formatCurrencyWithSign, formatMultiCurrency, setCurrenciesCache } from '@/lib/currency-formatter';
 
 function formatNumber(amount: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -86,7 +66,7 @@ function SummaryCard({
           <MultiCurrencyAmount amounts={amounts} />
           {convertedAmount !== undefined && convertedAmount !== null && !Number.isNaN(convertedAmount) && (
             <p className="text-xl font-bold mt-1">
-              = {formatCurrency(convertedAmount)}
+              = {formatCurrency(convertedAmount as number)}
             </p>
           )}
         </div>
@@ -117,7 +97,7 @@ function TransactionItem({
           (transaction.amount ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'
         }`}
       >
-        {formatCurrency(transaction.amount, transaction.currency || 'USD')}
+        {formatCurrency(transaction.amount ?? 0, transaction.currency || 'USD')}
       </span>
     </div>
   );
@@ -125,6 +105,11 @@ function TransactionItem({
 
 export default function DashboardPage() {
   const { data: summary, isLoading, error } = useDashboardSummary();
+  const { data: currencies } = useCurrencies();
+
+  if (currencies) {
+    setCurrenciesCache(currencies);
+  }
 
   if (error) {
     return (

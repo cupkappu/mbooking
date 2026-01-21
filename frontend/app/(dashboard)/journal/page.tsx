@@ -3,9 +3,10 @@
 // Force dynamic rendering to avoid SSR pre-rendering issues with hooks
 export const dynamic = 'force-dynamic';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useJournalEntries, useAccounts, useCreateJournalEntry, useUpdateJournalEntry, useDeleteJournalEntry } from '@/hooks/use-api';
 import { useCurrencies } from '@/hooks/use-currencies';
+import { setCurrenciesCache, formatCurrencyWithSign } from '@/lib/currency-formatter';
 import type { JournalEntry, Account } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +30,12 @@ export default function JournalPage() {
   const createEntry = useCreateJournalEntry();
   const updateEntry = useUpdateJournalEntry();
   const deleteEntry = useDeleteJournalEntry();
+
+  useEffect(() => {
+    if (currencies) {
+      setCurrenciesCache(currencies);
+    }
+  }, [currencies]);
 
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
@@ -364,27 +371,7 @@ export default function JournalPage() {
                           ? 'text-red-600 font-medium' 
                           : 'text-green-600 font-medium'
                       }>
-                        {parseFloat(String(line.amount)) < 0 ? '-' : '+'}
-                        {(() => {
-                          const absAmount = Math.abs(parseFloat(String(line.amount)));
-                          // Use formatCurrency for proper currency symbol
-                          const currency = line.currency || 'USD';
-                          const currencyLocales: { [key: string]: string } = {
-                            USD: 'en-US',
-                            HKD: 'en-HK',
-                            CNY: 'zh-CN',
-                            EUR: 'de-DE',
-                            GBP: 'en-GB',
-                            JPY: 'ja-JP',
-                          };
-                          const locale = currencyLocales[currency] || 'en-US';
-                          return new Intl.NumberFormat(locale, {
-                            style: 'currency',
-                            currency: currency,
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          }).format(absAmount);
-                        })()}
+                        {formatCurrencyWithSign(parseFloat(String(line.amount)), line.currency || 'USD')}
                       </span>
                     </div>
                   ))}

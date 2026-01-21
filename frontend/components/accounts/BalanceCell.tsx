@@ -1,6 +1,9 @@
 'use client';
 
 import type { CurrencyBalance } from '@/types';
+import { setCurrenciesCache } from '@/lib/currency-formatter';
+import { useCurrencies } from '@/hooks/use-currencies';
+import { useEffect } from 'react';
 
 interface BalanceCellProps {
   currencies: CurrencyBalance[];
@@ -22,6 +25,14 @@ export function BalanceCell({
   convertedSubtreeTotal,
   displayCurrency,
 }: BalanceCellProps) {
+  const { data: currenciesData } = useCurrencies();
+
+  useEffect(() => {
+    if (currenciesData) {
+      setCurrenciesCache(currenciesData);
+    }
+  }, [currenciesData]);
+
   // Format: "1,000.00 CNY + 100.00 USD + 4,000.00 HKD"
   const balanceText = currencies
     .map((c) => `${formatNumber(c.amount)} ${c.currency}`)
@@ -31,7 +42,6 @@ export function BalanceCell({
   const convertedText = subtreeCurrencies && subtreeCurrencies.length > 0
     ? subtreeCurrencies
         .map((c) => `${formatNumber(c.amount)} ${c.currency}`)
-        .join(' + ')
     : null;
 
   const totalText = convertedSubtreeTotal
@@ -59,9 +69,13 @@ export function BalanceCell({
       {subtreeCurrencies && subtreeCurrencies.length > 0 && (
         <>
           <div className="h-px bg-border my-1" />
-          <span className="text-sm text-foreground font-mono">
-            {convertedText}
-          </span>
+          <div className="flex flex-col">
+            {convertedText?.map((text, index) => (
+              <span key={index} className="text-sm text-foreground font-mono">
+                {text}
+              </span>
+            ))}
+          </div>
           {convertedSubtreeTotal && (
             <span className="text-xs text-muted-foreground font-mono">
               = {totalText}

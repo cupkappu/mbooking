@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import { QueryProvider } from '@/providers/query-provider';
-import { SessionProvider } from '@/providers/session-provider';
+// SessionProvider 在根布局的 AppProviders 中已经提供，这里不需要重复创建
+// 重复创建会导致 session 状态需要重新同步，造成 SessionSync 无法正确同步 accessToken
 import { SessionSync } from '@/components/session-sync';
 import { UserMenu } from '@/components/layout/user-menu';
 import { Shield } from 'lucide-react';
@@ -28,10 +29,9 @@ export default function DashboardLayout({
   const isAdmin = (session?.user as any)?.role === 'admin';
 
   return (
-    <SessionProvider>
-      <QueryProvider>
-        <SessionSync />
-        <div className="min-h-screen flex">
+    <QueryProvider>
+      <SessionSync />
+      <div className="min-h-screen flex">
           <aside className="w-64 border-r bg-card">
             <div className="p-6">
               <Link href="/dashboard">
@@ -88,6 +88,5 @@ export default function DashboardLayout({
           </div>
         </div>
       </QueryProvider>
-    </SessionProvider>
   );
 }
