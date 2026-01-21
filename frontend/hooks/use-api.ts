@@ -102,11 +102,15 @@ export function useBalances(query: {
 }
 
 export interface DashboardSummary {
-  /** 按货币分别显示的资产余额，如 { HKD: 1000, USD: 50 } */
+  /** Per-currency assets, e.g. { HKD: 1000, USD: 50 } */
   assets: { [currency: string]: number } | null;
-  /** 按货币分别显示的负债余额 */
+  /** Assets converted to default currency */
+  converted_assets: number | null;
+  /** Per-currency liabilities */
   liabilities: { [currency: string]: number } | null;
-  /** 换算为单一货币后的净资产 */
+  /** Liabilities converted to default currency */
+  converted_liabilities: number | null;
+  /** Net worth in default currency */
   netWorth: number | null;
   recentTransactions: {
     id: string;
