@@ -132,3 +132,26 @@ export function useDashboardSummary() {
     staleTime: 30 * 1000, // Cache for 30 seconds
   });
 }
+
+export interface TenantInfo {
+  id: string;
+  name: string;
+  settings?: {
+    default_currency?: string;
+    timezone?: string;
+    [key: string]: any;
+  };
+}
+
+export function useDefaultCurrency() {
+  const { data: session, status } = useSession();
+
+  return useQuery({
+    queryKey: ['default-currency'],
+    queryFn: () => apiClient.get<TenantInfo>('/tenants/current'),
+    select: (data) => data.settings?.default_currency || 'USD',
+    // Only fetch when session is loaded AND has accessToken
+    enabled: status === 'authenticated' && !!session?.accessToken,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+}

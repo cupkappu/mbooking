@@ -4,7 +4,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useAccounts, useCreateAccount, useDeleteAccount, useUpdateAccount, useBalances } from '@/hooks/use-api';
+import { useAccounts, useCreateAccount, useDeleteAccount, useUpdateAccount, useBalances, useDefaultCurrency } from '@/hooks/use-api';
 import { useCurrencies } from '@/hooks/use-currencies';
 import type { Account } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -74,6 +74,7 @@ export default function AccountsPage() {
   const updateAccount = useUpdateAccount();
   const deleteAccount = useDeleteAccount();
   const { data: currencies } = useCurrencies();
+  const { data: defaultCurrency } = useDefaultCurrency();
 
   const accountTypes = ['assets', 'liabilities', 'equity', 'revenue', 'expense'];
 
@@ -82,6 +83,13 @@ export default function AccountsPage() {
       setCurrenciesCache(currencies);
     }
   }, [currencies]);
+
+  // Initialize display currency from tenant default, then localStorage, then USD
+  useEffect(() => {
+    if (defaultCurrency) {
+      setDisplayCurrency(defaultCurrency);
+    }
+  }, [defaultCurrency]);
 
   useEffect(() => {
     const savedCurrency = localStorage.getItem('accounts_display_currency');

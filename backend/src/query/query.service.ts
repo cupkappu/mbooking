@@ -135,7 +135,7 @@ export class QueryService {
           const shouldCalculateSubtree = !query.subtree_account_ids || 
                                         query.subtree_account_ids.includes(account.id);
           
-          if (shouldCalculateSubtree) {
+            if (shouldCalculateSubtree) {
             const subtreeBalances = await this.calculateSubtreeBalance(
               account.id,
               query.date_range,
@@ -143,19 +143,21 @@ export class QueryService {
             
             result.subtree_currencies = subtreeBalances;
             
+            // Calculate converted total from original currencies (NOT from already-converted values)
             if (query.convert_to) {
               let totalConverted = 0;
               for (const balance of subtreeBalances) {
                 if (balance.currency === query.convert_to) {
                   totalConverted += balance.amount;
                 } else {
-                  const individualRate = await this.rateEngine.getRate(
+                  // Get rate from original currency to target currency
+                  const rate = await this.rateEngine.getRate(
                     balance.currency,
                     query.convert_to,
                     { date: query.specific_date ? new Date(query.specific_date) : undefined }
                   );
-                  if (individualRate) {
-                    totalConverted += balance.amount * individualRate.rate;
+                  if (rate) {
+                    totalConverted += balance.amount * rate.rate;
                   }
                 }
               }
