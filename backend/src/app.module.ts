@@ -15,6 +15,7 @@ import { BudgetsModule } from './budgets/budgets.module';
 import { ReportsModule } from './reports/reports.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AdminModule } from './admin/admin.module';
+import { SchemaInitModule } from './common/seeds/schema-init.module';
 import { SeedsModule } from './common/seeds/seeds.module';
 import { SetupModule } from './setup/setup.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
@@ -33,10 +34,8 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
       password: process.env.DATABASE_PASSWORD || 'secret',
       database: process.env.DATABASE_NAME || 'accounting',
       autoLoadEntities: true,
-      synchronize: false, // CRITICAL: Disable for production - use migrations instead
+      synchronize: false, // CRITICAL: Disable for production
       logging: process.env.NODE_ENV === 'development',
-      // Note: TenantSubscriber removed due to TypeORM container initialization timing issues
-      // Tenant isolation is handled via TenantContext in services
     }),
     ScheduleModule.forRoot(),
     AuthModule,
@@ -51,6 +50,7 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
     ReportsModule,
     CurrenciesModule,
     AdminModule,
+    SchemaInitModule, // SchemaInitModule runs first to create tables
     SeedsModule,
     SetupModule,
   ],
