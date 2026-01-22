@@ -47,6 +47,7 @@ test-results/
 
 # sisyphus
 .sisyphus/
+.opencode/
 
 # bug documentation
 docs/bug
