@@ -316,13 +316,6 @@ export function useTriggerManualFetch() {
   });
 }
 
-export function useDataExport() {
-  return useMutation({
-    mutationFn: (data: { scope: string; format: string }) =>
-      apiClient.post<any>('/admin/export', data),
-  });
-}
-
 export function useAdminPlugins() {
   return useQuery({
     queryKey: ['admin-plugins'],

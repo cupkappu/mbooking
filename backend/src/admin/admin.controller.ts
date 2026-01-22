@@ -14,7 +14,7 @@ import {
   HttpCode,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { AdminService, PaginationParams, LogQueryParams, BulkUserAction, SystemConfig, ExportParams } from './admin.service';
+import { AdminService, PaginationParams, LogQueryParams, BulkUserAction, SystemConfig } from './admin.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -423,24 +423,6 @@ export class AdminController {
 
   // =========================================================================
   // Data Export
-  // =========================================================================
-
-  @Post('export')
-  async exportData(
-    @Req() req: RequestWithIp,
-    @Body() body: ExportParams,
-  ) {
-    const tenantId = (req as any).user?.tenant_id || 'system';
-    const adminId = (req as any).user?.userId;
-    const result = await this.adminService.exportData(tenantId, body, adminId);
-
-    if (body.format === 'json') {
-      return { success: true, data: result };
-    }
-
-    return { success: true, data: result, message: 'Export initiated' };
-  }
-
   // =========================================================================
   // Scheduler Control
   // =========================================================================

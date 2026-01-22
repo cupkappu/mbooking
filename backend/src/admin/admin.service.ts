@@ -60,11 +60,6 @@ export interface SystemConfig {
   mfa_required: boolean;
 }
 
-export interface ExportParams {
-  scope: 'full' | 'accounts' | 'journal' | 'rates';
-  format: 'json' | 'csv' | 'sql';
-}
-
 export interface HealthStatus {
   status: 'healthy' | 'degraded' | 'fail';
   timestamp: string;
@@ -597,7 +592,9 @@ export class AdminService {
   async getAuditLogs(
     options: LogQueryParams = {},
   ): Promise<{ logs: AuditLog[]; total: number }> {
-    const { offset = 0, limit = 50, user_id, action, entity_type, date_from, date_to } = options;
+    const offset = Number(options.offset) || 0;
+    const limit = Number(options.limit) || 50;
+    const { user_id, action, entity_type, date_from, date_to } = options;
 
     const query = this.auditLogRepository.createQueryBuilder('log');
 
@@ -649,198 +646,6 @@ export class AdminService {
     const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(',')).join('\n');
 
     return csv;
-  }
-
-  // =========================================================================
-  // Data Export
-  // =========================================================================
-
-  async exportData(
-    tenantId: string,
-    params: ExportParams,
-    adminId: string,
-  ): Promise<any> {
-    let data: any;
-    let recordCount = 0;
-
-    switch (params.scope) {
-      case 'full':
-        const accounts = await this.accountRepository.find({ where: { tenant_id: tenantId } });
-        const entries = await this.journalEntryRepository.find({ where: { tenant_id: tenantId } });
-        const lines = await this.journalLineRepository.find({ where: { tenant_id: tenantId } });
-        const currencies = await this.currencyRepository.find();
-        const rates = await this.exchangeRateRepository.find();
-        const budgets = await this.budgetRepository.find({ where: { tenant_id: tenantId } });
-        data = { accounts, journal_entries: entries, journal_lines: lines, currencies, exchange_rates: rates, budgets };
-        recordCount = accounts.length + entries.length + lines.length + currencies.length + rates.length + budgets.length;
-        break;
-
-      case 'accounts':
-        data = await this.accountRepository.find({ where: { tenant_id: tenantId } });
-        recordCount = data.length;
-        break;
-
-      case 'journal':
-        const journalEntries = await this.journalEntryRepository.find({ where: { tenant_id: tenantId } });
-        const journalLines = await this.journalLineRepository.find({ where: { tenant_id: tenantId } });
-        data = { entries: journalEntries, lines: journalLines };
-        recordCount = journalEntries.length + journalLines.length;
-        break;
-
-      case 'rates':
-        data = await this.exchangeRateRepository.find();
-        recordCount = data.length;
-        break;
-    }
-
-    await this.log(
-      adminId,
-      'admin.export',
-      'system',
-      null,
-      null,
-      { scope: params.scope, format: params.format, record_count: recordCount },
-    );
-
-    if (params.format === 'json') {
-      return { data, record_count: recordCount };
-    }
-
-    if (params.format === 'csv') {
-      const csv = this.generateCSV(data, params.scope);
-      return { 
-        data: csv, 
-        record_count: recordCount,
-        content_type: 'text/csv',
-        filename: `export_${params.scope}_${new Date().toISOString().split('T')[0]}.csv`
-      };
-    }
-
-    if (params.format === 'sql') {
-      const sql = this.generateSQL(data, params.scope, tenantId);
-      return { 
-        data: sql, 
-        record_count: recordCount,
-        content_type: 'application/sql',
-        filename: `export_${params.scope}_${new Date().toISOString().split('T')[0]}.sql`
-      };
-    }
-
-    return { message: 'Export initiated', scope: params.scope, format: params.format, record_count: recordCount };
-  }
-
-  private generateCSV(data: any, scope: string): string {
-    const rows: string[][] = [];
-
-    const addTable = (tableData: any[], columns: string[], tableName: string) => {
-      if (!tableData || tableData.length === 0) return;
-      rows.push([`-- Table: ${tableName}`]);
-      rows.push(columns);
-      tableData.forEach((row: any) => {
-        rows.push(columns.map((col: string) => {
-          const value = row[col];
-          if (value === null || value === undefined) return '';
-          if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-            return `"${value.replace(/"/g, '""')}"`;
-          }
-          return String(value);
-        }));
-      });
-      rows.push([]); // Empty line between tables
-    };
-
-    const accountCols = ['id', 'name', 'type', 'currency', 'balance', 'parent_id', 'tenant_id', 'created_at'];
-    const entryCols = ['id', 'date', 'description', 'reference', 'tenant_id', 'created_at'];
-    const lineCols = ['id', 'entry_id', 'account_id', 'debit', 'credit', 'currency', 'amount', 'created_at'];
-    const currencyCols = ['id', 'code', 'name', 'decimals', 'symbol', 'created_at'];
-    const rateCols = ['id', 'base_currency', 'quote_currency', 'rate', 'date', 'provider_id', 'created_at'];
-    const budgetCols = ['id', 'name', 'account_id', 'amount', 'period_type', 'start_date', 'end_date', 'tenant_id', 'created_at'];
-
-    switch (scope) {
-      case 'full':
-        addTable(data.accounts, accountCols, 'accounts');
-        addTable(data.journal_entries, entryCols, 'journal_entries');
-        addTable(data.journal_lines, lineCols, 'journal_lines');
-        addTable(data.currencies, currencyCols, 'currencies');
-        addTable(data.exchange_rates, rateCols, 'exchange_rates');
-        addTable(data.budgets, budgetCols, 'budgets');
-        break;
-      case 'accounts':
-        addTable(data, accountCols, 'accounts');
-        break;
-      case 'journal':
-        addTable(data.entries, entryCols, 'journal_entries');
-        addTable(data.lines, lineCols, 'journal_lines');
-        break;
-      case 'rates':
-        addTable(data, rateCols, 'exchange_rates');
-        break;
-    }
-
-    return rows.map((row: string[]) => row.join(',')).join('\n');
-  }
-
-  private generateSQL(data: any, scope: string, tenantId: string): string {
-    const statements: string[] = [];
-    const timestamp = new Date().toISOString();
-
-    const generateInsert = (tableData: any[], tableName: string, columns: string[]) => {
-      if (!tableData || tableData.length === 0) return;
-      statements.push(`-- Table: ${tableName}`);
-      statements.push(`-- Exported at: ${timestamp}`);
-      tableData.forEach((row: any) => {
-        const values = columns.map((col: string) => {
-          const value = row[col];
-          if (value === null || value === undefined) return 'NULL';
-          if (typeof value === 'string') {
-            return `'${value.replace(/'/g, "''")}'`;
-          }
-          if (value instanceof Date) {
-            return `'${value.toISOString()}'`;
-          }
-          return String(value);
-        });
-        statements.push(`INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values.join(', ')});`);
-      });
-      statements.push('');
-    };
-
-    const accountCols = ['id', 'name', 'type', 'currency', 'balance', 'parent_id', 'tenant_id', 'created_at', 'updated_at'];
-    const entryCols = ['id', 'date', 'description', 'reference', 'tenant_id', 'created_at', 'updated_at'];
-    const lineCols = ['id', 'entry_id', 'account_id', 'debit', 'credit', 'currency', 'amount', 'created_at', 'updated_at'];
-    const currencyCols = ['id', 'code', 'name', 'decimals', 'symbol', 'created_at', 'updated_at'];
-    const rateCols = ['id', 'base_currency', 'quote_currency', 'rate', 'date', 'provider_id', 'created_at', 'updated_at'];
-    const budgetCols = ['id', 'name', 'account_id', 'amount', 'period_type', 'start_date', 'end_date', 'tenant_id', 'created_at', 'updated_at'];
-
-    statements.push(`-- Multi-Currency Accounting Export`);
-    statements.push(`-- Scope: ${scope}`);
-    statements.push(`-- Tenant: ${tenantId}`);
-    statements.push(`-- Generated at: ${timestamp}`);
-    statements.push('');
-
-    switch (scope) {
-      case 'full':
-        generateInsert(data.accounts, 'accounts', accountCols);
-        generateInsert(data.journal_entries, 'journal_entries', entryCols);
-        generateInsert(data.journal_lines, 'journal_lines', lineCols);
-        generateInsert(data.currencies, 'currencies', currencyCols);
-        generateInsert(data.exchange_rates, 'exchange_rates', rateCols);
-        generateInsert(data.budgets, 'budgets', budgetCols);
-        break;
-      case 'accounts':
-        generateInsert(data, 'accounts', accountCols);
-        break;
-      case 'journal':
-        generateInsert(data.entries, 'journal_entries', entryCols);
-        generateInsert(data.lines, 'journal_lines', lineCols);
-        break;
-      case 'rates':
-        generateInsert(data, 'exchange_rates', rateCols);
-        break;
-    }
-
-    statements.push('-- End of export');
-    return statements.join('\n');
   }
 
   // =========================================================================
