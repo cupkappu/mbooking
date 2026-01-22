@@ -11,6 +11,9 @@ jest.mock('next-auth/react', () => ({
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(() => ({ push: jest.fn() })),
   usePathname: jest.fn(() => '/'),
+  useSearchParams: jest.fn(() => ({
+    get: jest.fn(() => null),
+  })),
 }));
 
 jest.mock('@tanstack/react-query', () => ({

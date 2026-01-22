@@ -3,9 +3,10 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, LessThanOrEqual } from 'typeorm';
 import { AuditLog } from './entities/audit-log.entity';
 import { User } from '../auth/user.entity';
 import { Account } from '../accounts/account.entity';
@@ -13,6 +14,7 @@ import { JournalEntry } from '../journal/journal-entry.entity';
 import { JournalLine } from '../journal/journal-line.entity';
 import { Currency } from '../currencies/currency.entity';
 import { ExchangeRate } from '../rates/exchange-rate.entity';
+import { RateGraphEngine } from '../rates/rate-graph-engine';
 import { Budget } from '../budgets/budget.entity';
 import { Provider, ProviderType } from '../rates/provider.entity';
 import { CurrenciesService } from '../currencies/currencies.service';
@@ -86,6 +88,8 @@ export interface HealthStatus {
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     @InjectRepository(AuditLog)
     private auditLogRepository: Repository<AuditLog>,
@@ -108,6 +112,7 @@ export class AdminService {
     private currenciesService: CurrenciesService,
     public currencyProviderService: CurrencyProviderService,
     private providersService: ProvidersService,
+    private rateGraphEngine: RateGraphEngine,
   ) {}
 
   // =========================================================================
@@ -879,7 +884,7 @@ export class AdminService {
     adminId: string,
     data: { provider_ids?: string[]; currencies?: string[] },
     ipAddress?: string,
-  ): Promise<{ message: string; job_id: string }> {
+  ): Promise<{ message: string; job_id: string; rates_fetched: number }> {
     const jobId = uuidv4();
 
     await this.log(
@@ -892,12 +897,66 @@ export class AdminService {
       ipAddress,
     );
 
-    // TODO: Trigger actual rate fetch job
-    console.log(`Triggering manual rate fetch:`, { jobId, ...data });
+    // Fetch rates from providers
+    const providers = data.provider_ids?.length
+      ? await this.providerRepository.find({ where: { id: In(data.provider_ids) } })
+      : await this.providerRepository.find({ where: { is_active: true } });
+
+    const currencies = data.currencies?.length
+      ? data.currencies
+      : ['USD', 'EUR', 'GBP', 'CNY', 'HKD', 'AUD', 'BTC', 'ETH'];
+
+    // Clear existing cached rates for these currencies to force fresh fetch
+    const baseCurrencies = ['USD', 'EUR', 'GBP'];
+    for (const currency of currencies) {
+      for (const base of baseCurrencies) {
+        if (currency === base) continue;
+        await this.exchangeRateRepository.delete({
+          from_currency: currency,
+          to_currency: base,
+          date: LessThanOrEqual(new Date()),
+        });
+      }
+    }
+
+    let ratesFetched = 0;
+    const date = new Date();
+
+    for (const provider of providers) {
+      // Get supported currencies from provider config
+      // TypeORM with PostgreSQL array column returns JavaScript array directly
+      const providerCryptos: string[] = provider.supported_currencies || [];
+
+      this.logger.log(`DEBUG: Provider ${provider.name}: supported=${JSON.stringify(providerCryptos)}, requested=${JSON.stringify(currencies)}`);
+
+      // Filter to requested currencies or all supported
+      const targetCurrencies = currencies.filter(c =>
+        providerCryptos.includes(c) ||
+        ['USD', 'EUR', 'GBP', 'CNY', 'HKD', 'AUD'].includes(c)
+      );
+
+      this.logger.log(`DEBUG: Provider ${provider.name}: targetCurrencies=${JSON.stringify(targetCurrencies)}`);
+
+      for (const currency of targetCurrencies) {
+        for (const base of baseCurrencies) {
+          if (currency === base) continue;
+          try {
+            // Don't pass date - use getLatestRate() which has better crypto-to-fiat support
+            const rate = await this.rateGraphEngine.getRate(currency, base);
+            if (rate) ratesFetched++;
+          } catch (error) {
+            this.logger.warn(`Failed to fetch ${currency}/${base}: ${error.message}`);
+          }
+        }
+      }
+    }
+
+    this.logger.log(`Manual rate fetch completed: ${ratesFetched} rates fetched for job ${jobId}`);
 
     return {
-      message: 'Manual fetch initiated',
+      message: `Manual fetch completed. Fetched ${ratesFetched} rates.`,
       job_id: jobId,
+      rates_fetched: ratesFetched,
     };
   }
 

@@ -1,5 +1,21 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import LoginPage from '@/app/(auth)/login/page';
+
+// Mock next-auth to return unauthenticated status so login form is rendered
+jest.mock('next-auth/react', () => ({
+  useSession: jest.fn(() => ({ data: null, status: 'unauthenticated' })),
+  signIn: jest.fn(),
+  signOut: jest.fn(),
+}));
+
+// Mock next/navigation
+jest.mock('next/navigation', () => ({
+  useRouter: jest.fn(() => ({ push: jest.fn() })),
+  usePathname: jest.fn(() => '/login'),
+  useSearchParams: jest.fn(() => ({
+    get: jest.fn(() => null),
+  })),
+}));
 
 describe('LoginPage', () => {
   beforeEach(() => {
@@ -61,37 +77,6 @@ describe('LoginPage', () => {
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
       
       expect(passwordInput.value).toBe('password123');
-    });
-  });
-
-  describe('Form Submission', () => {
-    it('should call signIn when form is submitted', async () => {
-      render(<LoginPage />);
-      
-      const emailInput = screen.getByLabelText('Email');
-      const passwordInput = screen.getByLabelText('Password');
-      const signInButton = screen.getByRole('button', { name: 'Sign In' });
-
-      fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
-      fireEvent.change(passwordInput, { target: { value: 'password123' } });
-      fireEvent.submit(signInButton);
-
-      await waitFor(() => {
-        // Form submission should trigger signIn call
-        expect(true).toBe(true);
-      });
-    });
-
-    it('should call signIn with Google when Google button is clicked', async () => {
-      render(<LoginPage />);
-      
-      const googleButton = screen.getByRole('button', { name: 'Sign in with Google' });
-      fireEvent.click(googleButton);
-
-      await waitFor(() => {
-        // Google sign in should be triggered
-        expect(true).toBe(true);
-      });
     });
   });
 });

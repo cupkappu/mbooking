@@ -14,6 +14,7 @@ import { Budget } from '../budgets/budget.entity';
 import { Provider } from '../rates/provider.entity';
 import { CurrenciesModule } from '../currencies/currencies.module';
 import { ProvidersModule } from '../providers/providers.module';
+import { RatesModule } from '../rates/rates.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ProvidersModule } from '../providers/providers.module';
     ]),
     CurrenciesModule,
     ProvidersModule,
+    RatesModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

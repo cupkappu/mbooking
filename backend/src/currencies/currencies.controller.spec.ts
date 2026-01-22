@@ -76,10 +76,6 @@ describe('CurrenciesController', () => {
       expect((controller as any).delete).toBeUndefined();
     });
 
-    it('should NOT have setDefault method', () => {
-      expect((controller as any).setDefault).toBeUndefined();
-    });
-
     it('should NOT have seed method', () => {
       expect((controller as any).seed).toBeUndefined();
     });

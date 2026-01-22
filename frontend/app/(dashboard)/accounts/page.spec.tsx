@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import AccountsPage from './page';
-import { useAccounts, useCreateAccount, useUpdateAccount, useBalances } from '@/hooks/use-api';
+import { useAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount, useBalances, useDefaultCurrency } from '@/hooks/use-api';
 import { useCurrencies } from '@/hooks/use-currencies';
 import { currenciesApi } from '@/lib/currencies';
 
@@ -98,12 +98,23 @@ describe('AccountsPage', () => {
       isPending: false,
     }));
 
+    (useDeleteAccount as jest.Mock).mockImplementation(() => ({
+      mutateAsync: jest.fn(),
+      isPending: false,
+    }));
+
     (useCurrencies as jest.Mock).mockReturnValue({
       data: mockCurrencies,
       isLoading: false,
     });
 
     (currenciesApi.getAll as jest.Mock).mockResolvedValue(mockCurrencies);
+
+    // Default currency hook - ensure tests have a stable default
+    (useDefaultCurrency as jest.Mock).mockReturnValue({
+      data: 'USD',
+      isLoading: false,
+    });
   });
 
   describe('Rendering', () => {
@@ -121,8 +132,8 @@ describe('AccountsPage', () => {
         render(<AccountsPage />);
       });
 
-      const assetsAccount = screen.getByText('Assets');
-      expect(assetsAccount).toBeTruthy();
+      const assetsAccounts = screen.getAllByText('Assets');
+      expect(assetsAccounts.length).toBeGreaterThan(0);
     });
 
     it('should show subtree balance toggle switch', async () => {
@@ -165,6 +176,16 @@ describe('AccountsPage', () => {
       await act(async () => {
         render(<AccountsPage />);
       });
+
+      // Open the currency select trigger so options render in the DOM
+      const comboboxes = screen.getAllByRole('combobox');
+      const currencyTrigger = comboboxes.find(cb => cb.textContent?.includes('USD'));
+      expect(currencyTrigger).toBeTruthy();
+
+      // jsdom doesn't implement scrollIntoView used by Radix; stub it to avoid errors
+      (Element.prototype as any).scrollIntoView = jest.fn();
+
+      fireEvent.click(currencyTrigger!);
 
       await waitFor(() => {
         const usdOption = screen.getByRole('option', { name: 'USD' });
@@ -232,7 +253,8 @@ describe('AccountsPage', () => {
         render(<AccountsPage />);
       });
 
-      const currencySelect = screen.getByRole('combobox');
+      const comboboxes = screen.getAllByRole('combobox');
+      const currencySelect = comboboxes.find(cb => cb.textContent?.includes('USD'));
       expect(currencySelect).toBeTruthy();
     });
   });

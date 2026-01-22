@@ -13,12 +13,18 @@ import { ExchangeRate } from '../rates/exchange-rate.entity';
 import { Budget } from '../budgets/budget.entity';
 import { Provider } from '../rates/provider.entity';
 import { CurrenciesService } from '../currencies/currencies.service';
+import { CurrencyProviderService } from '../currencies/currency-provider.service';
+import { ProvidersService } from '../providers/providers.service';
+import { RateGraphEngine } from '../rates/rate-graph-engine';
 
 describe('AdminService', () => {
   let service: AdminService;
   let auditLogRepository: jest.Mocked<Repository<AuditLog>>;
   let currencyRepository: jest.Mocked<Repository<Currency>>;
   let currenciesService: jest.Mocked<CurrenciesService>;
+  let currencyProviderService: jest.Mocked<CurrencyProviderService>;
+  let providersService: jest.Mocked<ProvidersService>;
+  let rateGraphEngine: jest.Mocked<RateGraphEngine>;
 
   beforeEach(async () => {
     const mockAuditLogRepo = {
@@ -82,6 +88,20 @@ describe('AdminService', () => {
       seedDefaultCurrencies: jest.fn(),
     } as any;
 
+    currencyProviderService = {
+      getSupportedCurrencies: jest.fn(),
+    } as any;
+
+    providersService = {
+      findAll: jest.fn(),
+      create: jest.fn(),
+    } as any;
+
+    rateGraphEngine = {
+      getRate: jest.fn(),
+      convert: jest.fn(),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdminService,
@@ -95,6 +115,9 @@ describe('AdminService', () => {
         { provide: getRepositoryToken(Budget), useValue: mockBudgetRepo },
         { provide: getRepositoryToken(Provider), useValue: mockProviderRepo },
         { provide: CurrenciesService, useValue: currenciesService },
+        { provide: CurrencyProviderService, useValue: currencyProviderService },
+        { provide: ProvidersService, useValue: providersService },
+        { provide: RateGraphEngine, useValue: rateGraphEngine },
       ],
     }).compile();
 

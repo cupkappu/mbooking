@@ -1,0 +1,111 @@
+version: '3.8'
+
+# Test environment Docker Compose
+# Usage: docker-compose -f docker-compose.test.yml up -d
+# This creates an isolated environment with no data persistence.
+# All data is stored in tmpfs and lost on container restart.
+
+services:
+  # PostgreSQL for testing - uses tmpfs for no persistence
+  postgres_test:
+    image: postgres:15-alpine
+    container_name: mca_postgres_test
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test_db
+    ports:
+      - "5433:5432"  # Different port from dev (5432) to avoid conflicts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d test_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # tmpfs ensures data is stored in memory only, lost on restart
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  # Backend service - test configuration
+  backend_test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mca_backend_test
+    environment:
+      # Database connection - points to postgres_test service
+      DATABASE_HOST: postgres_test
+      DATABASE_PORT: 5432
+      DATABASE_USER: test
+      DATABASE_PASSWORD: test
+      DATABASE_NAME: test_db
+
+      # JWT and Auth configuration
+      JWT_SECRET: test-secret-key-for-testing-only-do-not-use-in-production
+      NEXTAUTH_SECRET: test-nextauth-secret-for-testing-only-do-not-use-in-production
+      NEXTAUTH_URL: http://localhost:8068
+      NEXT_PUBLIC_API_URL: http://localhost:8067
+
+      # Environment
+      NODE_ENV: test
+      LOG_LEVEL: debug
+    ports:
+      - "8067:3001"
+    depends_on:
+      postgres_test:
+        condition: service_healthy
+    # Run migrations then start the server
+    command: >
+      sh -c "
+        echo 'Running database migrations...' &&
+        npm run migration:run &&
+        echo 'Starting backend server...' &&
+        npm run start:prod
+      "
+    restart: unless-stopped
+
+  # Frontend service - test configuration
+  frontend_test:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mca_frontend_test
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8067
+      NODE_ENV: test
+    ports:
+      - "8068:3000"
+    depends_on:
+      backend_test:
+        condition: service_healthy
+    # Wait for backend to be ready before starting
+    command: >
+      sh -c "
+        echo 'Waiting for backend to be ready...' &&
+        sleep 10 &&
+        echo 'Starting frontend server...' &&
+        npm run start:prod
+      "
+    restart: unless-stopped
+
+# No named volumes - uses tmpfs for postgres_test service
+# This ensures a completely fresh database on every run
+
+# Usage examples:
+# 
+# Start the test environment:
+#   docker-compose -f docker-compose.test.yml up -d
+#
+# Run E2E tests:
+#   npm run test:e2e
+#
+# Stop and remove everything (DATA WILL BE LOST):
+#   docker-compose -f docker-compose.test.yml down
+#
+# Complete reset (stop + remove + fresh start):
+#   docker-compose -f docker-compose.test.yml down -v && docker-compose -f docker-compose.test.yml up -d
+#
+# View logs:
+#   docker-compose -f docker-compose.test.yml logs -f
+#
+# Check status:
+#   docker-compose -f docker-compose.test.yml ps

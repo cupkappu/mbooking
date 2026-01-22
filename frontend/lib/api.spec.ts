@@ -1,4 +1,4 @@
-// Mock the environment variable
+// Mock the environment variable and external dependencies
 const mockFetch = jest.fn();
 
 jest.mock('next/config', () => ({
@@ -9,12 +9,34 @@ jest.mock('next/config', () => ({
   }),
 }));
 
+// Mock next-auth/react - getSession is imported in api.ts
+jest.mock('next-auth/react', () => ({
+  getSession: jest.fn(),
+}));
+
 // Mock global fetch before importing the module
 global.fetch = mockFetch;
+
+// Mock localStorage
+const localStorageMock = {
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+  removeItem: jest.fn(),
+  clear: jest.fn(),
+};
+Object.defineProperty(global, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+});
 
 describe('apiClient', () => {
   beforeEach(() => {
     mockFetch.mockClear();
+    // Return a token to avoid calling /api/auth/session
+    localStorageMock.getItem.mockImplementation((key: string) => {
+      if (key === 'accessToken') return 'mock-token';
+      return null;
+    });
   });
 
   afterAll(() => {

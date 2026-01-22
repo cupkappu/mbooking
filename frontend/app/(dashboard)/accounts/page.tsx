@@ -63,12 +63,13 @@ export default function AccountsPage() {
   const [displayCurrency, setDisplayCurrency] = useState<string>('USD');
   const [availableCurrencies, setAvailableCurrencies] = useState<Currency[]>([]);
   const [maxExpandedDepth, setMaxExpandedDepth] = useState<number>(1);
+  const [showSubtreeBalances, setShowSubtreeBalances] = useState<boolean>(false);
 
   const { data: accounts, isLoading: accountsLoading, refetch: refetchAccounts } = useAccounts();
   const { data: balancesData, isLoading: balancesLoading, refetch: refetchBalances } = useBalances({ 
     depth: maxExpandedDepth, 
     convert_to: displayCurrency, 
-    include_subtree: true 
+    include_subtree: showSubtreeBalances 
   });
   const createAccount = useCreateAccount();
   const updateAccount = useUpdateAccount();
@@ -255,7 +256,10 @@ export default function AccountsPage() {
   if (accountsLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <span>Loading accounts...</span>
+        </div>
       </div>
     );
   }
@@ -401,7 +405,21 @@ export default function AccountsPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-2">
+                <input
+                  aria-label="Show Subtree Balances"
+                  type="checkbox"
+                  checked={showSubtreeBalances}
+                  onChange={() => { setShowSubtreeBalances(s => !s); refetchBalances(); }}
+                />
+                <span>Show Subtree Balances</span>
+              </label>
+            </div>
+
             <div className="md:w-32">
+              <label className="text-sm font-medium mr-2">Display Currency:</label>
               <Select value={displayCurrency} onValueChange={handleCurrencyChange}>
                 <SelectTrigger>
                   <SelectValue />
@@ -468,7 +486,7 @@ export default function AccountsPage() {
               <Folder className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No accounts yet</h3>
               <p className="text-muted-foreground mb-4">
-                Create your first account to get started with double-entry bookkeeping.
+                No accounts yet. Create your first account to get started.
               </p>
               <Button onClick={handleAddNew}>
                 <Plus className="h-4 w-4 mr-2" />

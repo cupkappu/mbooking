@@ -11,6 +11,11 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
+// Mock next-auth session so queries are enabled during tests
+jest.mock('next-auth/react', () => ({
+  useSession: jest.fn(() => ({ data: { accessToken: 'test-token' }, status: 'authenticated' })),
+}));
+
 import { apiClient } from '@/lib/api';
 
 // Create a test query client
@@ -74,7 +79,7 @@ describe('use-api hooks', () => {
       // Wait for the query to execute
       await waitFor(() => {
         expect(apiClient.post).toHaveBeenCalledWith(
-          '/api/v1/query/balances',
+          '/query/balances',
           { include_subtree: true }
         );
       });
@@ -105,7 +110,7 @@ describe('use-api hooks', () => {
 
       await waitFor(() => {
         expect(apiClient.post).toHaveBeenCalledWith(
-          '/api/v1/query/balances',
+          '/query/balances',
           {}
         );
       });
@@ -146,7 +151,7 @@ describe('use-api hooks', () => {
 
       await waitFor(() => {
         expect(apiClient.post).toHaveBeenCalledWith(
-          '/api/v1/query/balances',
+          '/query/balances',
           query
         );
       });

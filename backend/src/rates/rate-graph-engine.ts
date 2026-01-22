@@ -1,8 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import axios from 'axios';
 import { ExchangeRate } from './exchange-rate.entity';
 import { Provider, ProviderType } from './provider.entity';
+
+// Valid ISO 4217 currency codes (common ones)
+const VALID_CURRENCY_CODES = new Set([
+  'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'HKD', 'AUD', 'CAD', 'CHF',
+  'NZD', 'SGD', 'KRW', 'INR', 'BRL', 'MXN', 'ZAR', 'THB',
+  'BTC', 'ETH', 'USDT', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE',
+]);
 
 // ============================================================================
 // Graph Data Structures
@@ -604,16 +613,57 @@ export class RateGraphEngine {
   }
 
   /**
-   * Fetch rates from REST API provider
-   */
-  private async fetchFromRestApi(
-    graph: RateGraph,
-    provider: Provider,
-    date: Date
-  ): Promise<void> {
-    // Placeholder - REST API fetching would go here
-    // Similar logic to JS plugin but using axios
-  }
+    * Fetch rates from REST API provider
+    */
+   private async fetchFromRestApi(
+     graph: RateGraph,
+     provider: Provider,
+     date: Date
+   ): Promise<void> {
+     try {
+       const baseUrl = provider.config.base_url;
+       if (!baseUrl) return;
+
+       const currencies = provider.supported_currencies || [];
+       if (currencies.length < 2) return;
+
+       // Determine base currency from config or use first supported currency
+       const baseCurrency = (provider.config as any).base_currency || currencies[0];
+       const targetCurrencies = currencies.filter(c => c !== baseCurrency);
+
+       if (targetCurrencies.length === 0) return;
+
+       const dateStr = date
+         ? `${date.toISOString().split('T')[0]}`
+         : 'latest';
+
+       const url = `${baseUrl}/${dateStr}?base=${baseCurrency}&symbols=${targetCurrencies.join(',')}`;
+
+       const response = await axios.get(url, {
+         headers: provider.config.headers || {},
+       });
+
+       const rates = response.data.rates;
+       if (!rates) return;
+
+       for (const [currency, rateValue] of Object.entries(rates)) {
+         const rateNum = Number(rateValue);
+         if (isNaN(rateNum)) continue;
+
+         this.addEdgeToGraph(graph, {
+           from: baseCurrency,
+           to: currency,
+           rate: rateNum,
+           providerId: provider.id,
+           providerName: provider.name,
+           timestamp: date,
+           confidence: 0.9,
+         });
+       }
+     } catch (error) {
+       this.logger.warn(`Failed to fetch rates from REST API provider ${provider.name}: ${error.message}`);
+     }
+   }
 
   // ============================================================================
   // Graph Operations
@@ -1108,13 +1158,111 @@ export class RateGraphEngine {
   }
 
   /**
-   * Get cross rate via intermediate currencies using graph path
-   */
-  async getCrossRate(from: string, to: string, via: string[] = ['USD']): Promise<number> {
-    if (from.toUpperCase() === to.toUpperCase()) return 1;
+    * Get cross rate via intermediate currencies using graph path
+    */
+   async getCrossRate(from: string, to: string, via: string[] = ['USD']): Promise<number> {
+     if (from.toUpperCase() === to.toUpperCase()) return 1;
 
-    // Use graph-based path finding to get the best rate
-    const result = await this.getRate(from, to);
-    return result?.rate || 1;
-  }
+     // Use graph-based path finding to get the best rate
+     const result = await this.getRate(from, to);
+     return result?.rate || 1;
+   }
+
+   // ============================================================================
+   // Currency Validation
+   // ============================================================================
+
+   private validateCurrencyCode(currency: string): void {
+     if (!VALID_CURRENCY_CODES.has(currency.toUpperCase())) {
+       throw new BadRequestException(`Invalid currency code: ${currency}`);
+     }
+   }
+
+   // ============================================================================
+   // Scheduled Rate Fetching (migrated from RateEngine)
+   // ============================================================================
+
+   @Cron(CronExpression.EVERY_DAY_AT_6AM)
+   async fetchDailyRates(): Promise<void> {
+     this.logger.log('Starting daily rate fetch...');
+
+     const providers = await this.providerRepository.find({
+       where: { is_active: true, record_history: true },
+     });
+
+     const currencies = ['USD', 'EUR', 'GBP', 'JPY', 'CNY', 'HKD', 'AUD', 'CAD', 'CHF'];
+
+     for (const provider of providers) {
+       for (const base of currencies.slice(0, 3)) {
+         for (const target of currencies) {
+           if (base === target) continue;
+
+           await this.getRate(base, target, {
+             providerId: provider.id,
+             date: new Date(),
+           });
+         }
+       }
+     }
+
+     this.logger.log('Daily rate fetch completed');
+   }
+
+   // ============================================================================
+   // Manual Rate Support (migrated from RateEngine)
+   // ============================================================================
+
+   /**
+    * Set a manual exchange rate
+    */
+   async setManualRate(
+     from: string,
+     to: string,
+     rate: number,
+     date?: Date,
+   ): Promise<ExchangeRate> {
+     const fromUpper = from.toUpperCase();
+     const toUpper = to.toUpperCase();
+
+     this.validateCurrencyCode(fromUpper);
+     this.validateCurrencyCode(toUpper);
+
+     const exchangeDate = date || new Date();
+
+     const existing = await this.rateRepository.findOne({
+       where: {
+         from_currency: fromUpper,
+         to_currency: toUpper,
+         date: exchangeDate,
+       },
+     });
+
+     if (existing) {
+       existing.rate = rate;
+       existing.fetched_at = new Date();
+       existing.provider_id = 'manual';
+       return this.rateRepository.save(existing);
+     }
+
+     const newRate = this.rateRepository.create({
+       provider_id: 'manual',
+       from_currency: fromUpper,
+       to_currency: toUpper,
+       rate,
+       date: exchangeDate,
+       fetched_at: new Date(),
+     });
+
+     return this.rateRepository.save(newRate);
+   }
+
+   /**
+    * Get manual rates
+    */
+   async getManualRates(): Promise<ExchangeRate[]> {
+     return this.rateRepository.find({
+       where: { provider_id: 'manual' },
+       order: { fetched_at: 'DESC' },
+     });
+   }
 }

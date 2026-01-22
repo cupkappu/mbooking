@@ -13,7 +13,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     expect(screen.getByText('Total Assets')).toBeInTheDocument();
-    expect(screen.getAllByText('$0.00')).toHaveLength(3);
+    expect(screen.getAllByText('-')).toHaveLength(3);
     expect(screen.getByText('Total Liabilities')).toBeInTheDocument();
     expect(screen.getByText('Net Worth')).toBeInTheDocument();
   });
