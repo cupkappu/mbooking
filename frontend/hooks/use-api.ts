@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useInfiniteQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import { apiClient } from '@/lib/api';
 import type { Account, JournalEntry, AccountBalance } from '@/types';
@@ -25,26 +25,41 @@ export function useAccount(id: string) {
 }
 
 export function useCreateAccount() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (data: Partial<Account>) =>
       apiClient.post<Account>('/accounts', data),
-    onSuccess: () => {},
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['balances'] });
+    },
   });
 }
 
 export function useDeleteAccount() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (id: string) =>
       apiClient.delete<Account>(`/accounts/${id}`),
-    onSuccess: () => {},
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['balances'] });
+    },
   });
 }
 
 export function useUpdateAccount() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Account> }) =>
       apiClient.put<Account>(`/accounts/${id}`, data),
-    onSuccess: () => {},
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['balances'] });
+    },
   });
 }
 
@@ -62,26 +77,41 @@ export function useJournalEntries(options?: { offset?: number; limit?: number })
 }
 
 export function useCreateJournalEntry() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (data: any) =>
       apiClient.post<JournalEntry>('/journal', data),
-    onSuccess: () => {},
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['journal-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['balances'] });
+    },
   });
 }
 
 export function useDeleteJournalEntry() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (id: string) =>
       apiClient.delete<JournalEntry>(`/journal/${id}`),
-    onSuccess: () => {},
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['journal-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['balances'] });
+    },
   });
 }
 
 export function useUpdateJournalEntry() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) =>
       apiClient.put<JournalEntry>(`/journal/${id}`, data),
-    onSuccess: () => {},
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['journal-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['balances'] });
+    },
   });
 }
 

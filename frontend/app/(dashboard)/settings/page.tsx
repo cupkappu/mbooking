@@ -27,14 +27,12 @@ import { Pencil, Trash2, Check, X } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import { useToast } from '@/hooks/use-toast';
-import { currenciesApi } from '@/lib/currencies';
+import { useCurrencies, type Currency } from '@/hooks/use-currencies';
+import { apiClient } from '@/lib/api';
 import { tenantsApi } from '@/lib/tenants';
-import type { Currency } from '@/types/currency';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'general' | 'currencies'>('general');
-  const [currencies, setCurrencies] = useState<Currency[]>([]);
-  const [loading, setLoading] = useState(false);
   const [editingCurrency, setEditingCurrency] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     name: '',
@@ -47,6 +45,8 @@ export default function SettingsPage() {
   const { data: session } = useSession();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const { data: currencies } = useCurrencies();
 
   // Fetch current tenant settings
   const { data: tenant, isLoading: isTenantLoading } = useQuery({
@@ -67,7 +67,7 @@ export default function SettingsPage() {
 
   // Mutation for updating tenant settings
   const updateSettingsMutation = useMutation({
-    mutationFn: (settings: { default_currency?: string; timezone?: string }) => 
+    mutationFn: (settings: { default_currency?: string; timezone?: string }) =>
       tenantsApi.updateSettings(settings),
     onSuccess: (updatedTenant) => {
       queryClient.setQueryData(['tenant', 'current'], updatedTenant);
@@ -85,40 +85,36 @@ export default function SettingsPage() {
     },
   });
 
-  const fetchCurrencies = async () => {
-    try {
-      setLoading(true);
-      const data = await currenciesApi.getAll();
-      setCurrencies(data);
-    } catch (error) {
-      console.error('Failed to fetch currencies:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Currency mutation hooks with cache invalidation
+  const deleteCurrencyMutation = useMutation({
+    mutationFn: (code: string) => apiClient.delete<void>(`/currencies/${code}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currencies'] });
+    },
+  });
 
-  useEffect(() => {
-      fetchCurrencies();
-  }, [activeTab, currencies.length]);
+  const setDefaultMutation = useMutation({
+    mutationFn: (code: string) => apiClient.post<Currency>(`/currencies/${code}/set-default`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currencies'] });
+    },
+  });
 
-  const handleDeleteCurrency = async (code: string) => {
+  const updateCurrencyMutation = useMutation({
+    mutationFn: ({ code, data }: { code: string; data: Partial<Currency> }) =>
+      apiClient.put<Currency>(`/currencies/${code}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currencies'] });
+    },
+  });
+
+  const handleDeleteCurrency = (code: string) => {
     if (!confirm('Are you sure you want to delete this currency?')) return;
-    
-    try {
-      await currenciesApi.delete(code);
-      await fetchCurrencies();
-    } catch (error) {
-      console.error('Failed to delete currency:', error);
-    }
+    deleteCurrencyMutation.mutate(code);
   };
 
-  const handleSetDefault = async (code: string) => {
-    try {
-      await currenciesApi.setDefault(code);
-      await fetchCurrencies();
-    } catch (error) {
-      console.error('Failed to set default currency:', error);
-    }
+  const handleSetDefault = (code: string) => {
+    setDefaultMutation.mutate(code);
   };
 
   const startEditing = (currency: Currency) => {
@@ -126,8 +122,8 @@ export default function SettingsPage() {
     setEditForm({
       name: currency.name,
       symbol: currency.symbol,
-      is_active: currency.is_active,
-      is_default: currency.is_default,
+      is_active: currency.is_active ?? true,
+      is_default: currency.is_default ?? false,
     });
   };
 
@@ -136,14 +132,9 @@ export default function SettingsPage() {
     setEditForm({ name: '', symbol: '', is_active: true, is_default: false });
   };
 
-  const saveEdit = async (code: string) => {
-    try {
-      await currenciesApi.update(code, editForm);
-      cancelEditing();
-      await fetchCurrencies();
-    } catch (error) {
-      console.error('Failed to update currency:', error);
-    }
+  const saveEdit = (code: string) => {
+    updateCurrencyMutation.mutate({ code, data: editForm });
+    cancelEditing();
   };
 
   const tabs = [
@@ -188,7 +179,7 @@ export default function SettingsPage() {
                     <SelectValue placeholder="Select currency" />
                   </SelectTrigger>
                   <SelectContent>
-                    {currencies.map((currency) => (
+                    {currencies?.map((currency) => (
                       <SelectItem key={currency.code} value={currency.code}>
                        {currency.code} - {currency.name}
                      </SelectItem>
@@ -212,7 +203,7 @@ export default function SettingsPage() {
                </Select>
              </div>
 
-             <Button 
+             <Button
                onClick={() => {
                  updateSettingsMutation.mutate({
                    default_currency: defaultCurrency,
@@ -247,7 +238,7 @@ export default function SettingsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {currencies.map((currency) => (
+                  {currencies?.map((currency) => (
                     <TableRow key={currency.code}>
                       {editingCurrency === currency.code ? (
                         <>
@@ -331,7 +322,7 @@ export default function SettingsPage() {
                   ))}
                 </TableBody>
               </Table>
-              {currencies.length === 0 && (
+              {currencies?.length === 0 && (
                 <p className="text-center text-muted-foreground py-8">
                   No currencies found.
                 </p>

@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 import { apiClient } from '@/lib/api';
 
@@ -8,6 +8,9 @@ export interface Currency {
   symbol: string;
   decimal_places: number;
   is_active: boolean;
+  is_default?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AdminCurrency extends Currency {
@@ -46,23 +49,41 @@ export function useAdminCurrencies() {
 }
 
 export function useCreateCurrency() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (data: Omit<Currency, 'is_active'>) =>
       apiClient.post<AdminCurrency>('/admin/currencies', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-currencies'] });
+    },
   });
 }
 
 export function useUpdateCurrency() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: ({ code, data }: { code: string; data: Partial<Currency> }) =>
       apiClient.put<AdminCurrency>(`/admin/currencies/${code}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-currencies'] });
+    },
   });
 }
 
 export function useDeleteCurrency() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (code: string) =>
       apiClient.delete<{ success: boolean }>(`/admin/currencies/${code}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-currencies'] });
+    },
   });
 }
 

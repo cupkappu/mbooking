@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useMemo, useEffect } from 'react';
 import { useAccounts, useCreateAccount, useDeleteAccount, useUpdateAccount, useBalances, useDefaultCurrency } from '@/hooks/use-api';
-import { useCurrencies } from '@/hooks/use-currencies';
+import { useCurrencies, type Currency } from '@/hooks/use-currencies';
 import type { Account } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,8 +22,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { currenciesApi } from '@/lib/currencies';
-import type { Currency } from '@/types/currency';
 import { BalanceDisplay } from '@/components/accounts/BalanceDisplay';
 import type { CurrencyBalance, AccountBalance } from '@/types';
 import { formatCurrency, setCurrenciesCache } from '@/lib/currency-formatter';
@@ -61,7 +59,6 @@ export default function AccountsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedParent, setSelectedParent] = useState('all');
   const [displayCurrency, setDisplayCurrency] = useState<string>('USD');
-  const [availableCurrencies, setAvailableCurrencies] = useState<Currency[]>([]);
   const [maxExpandedDepth, setMaxExpandedDepth] = useState<number>(1);
   const [showSubtreeBalances, setShowSubtreeBalances] = useState<boolean>(false);
 
@@ -97,17 +94,6 @@ export default function AccountsPage() {
     if (savedCurrency) {
       setDisplayCurrency(savedCurrency);
     }
-
-    const fetchCurrencies = async () => {
-      try {
-        const currencies = await currenciesApi.getAll();
-        setAvailableCurrencies(currencies.filter(currency => currency.is_active));
-      } catch (error) {
-        console.error('Failed to fetch currencies:', error);
-      }
-    };
-
-    fetchCurrencies();
   }, []);
 
   const balanceMap = useMemo(() => {
@@ -425,7 +411,7 @@ export default function AccountsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableCurrencies.map((currency: Currency) => (
+                  {currencies?.filter((c) => c.is_active).map((currency) => (
                     <SelectItem key={currency.code} value={currency.code}>
                       {currency.code}
                     </SelectItem>
