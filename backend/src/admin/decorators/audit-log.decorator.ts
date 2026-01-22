@@ -62,7 +62,7 @@ export function AuditLog(options: AuditLogOptions) {
         ? args.find((arg: any) => 
             typeof arg === 'string' && 
             arg.length > 20 && 
-            /^[a-zA-Z0-9\s\/\.\-\(\)]+$/.test(arg)
+            /^[a-zA-Z0-9\s\/\.\-\(\);_]+$/.test(arg)
           ) || undefined
         : undefined;
 
