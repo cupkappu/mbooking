@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Login Verification', () => {
-  const VALID_EMAIL = 'admin@example.com';
-  const VALID_PASSWORD = 'password';
+  const VALID_EMAIL = 'admin@test.com';
+  const VALID_PASSWORD = 'AdminTest123';
   const INVALID_EMAIL = 'invalid@example.com';
   const INVALID_PASSWORD = 'wrongpassword';
 

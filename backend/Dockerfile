@@ -30,6 +30,14 @@ COPY --from=builder /app/package.json ./
 # Copy plugins directory
 COPY --from=builder /app/plugins ./plugins
 
+# Copy config and migrations for TypeORM CLI
+COPY --from=builder /app/src/config ./src/config
+COPY --from=builder /app/src/migrations ./src/migrations
+COPY --from=builder /app/tsconfig.json ./
+
+# Install ts-node for migration CLI (only for dev/test, not production)
+RUN npm install --production=false ts-node 2>/dev/null || true
+
 # Change ownership
 RUN chown -R appuser:appgroup /app
 
