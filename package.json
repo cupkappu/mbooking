@@ -29,6 +29,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.562.0",
     "playwright": "^1.57.0",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "typeorm-naming-strategies": "^4.1.0"
   }
 }

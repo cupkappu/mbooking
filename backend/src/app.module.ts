@@ -2,6 +2,7 @@ import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 
 import { AuthModule } from './auth/auth.module';
 import { TenantsModule } from './tenants/tenants.module';
@@ -35,6 +36,7 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
       database: process.env.DATABASE_NAME || 'accounting',
       autoLoadEntities: true,
       synchronize: false, // CRITICAL: Disable for production
+      namingStrategy: new SnakeNamingStrategy(),
       logging: process.env.NODE_ENV === 'development',
     }),
     ScheduleModule.forRoot(),
