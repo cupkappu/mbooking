@@ -2,6 +2,7 @@ import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 
 import { AuthModule } from './auth/auth.module';
 import { TenantsModule } from './tenants/tenants.module';
@@ -15,10 +16,13 @@ import { BudgetsModule } from './budgets/budgets.module';
 import { ReportsModule } from './reports/reports.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AdminModule } from './admin/admin.module';
-import { SchemaInitModule } from './common/seeds/schema-init.module';
+// SchemaInitModule removed - use TypeORM synchronize for tests instead
 import { SeedsModule } from './common/seeds/seeds.module';
 import { SetupModule } from './setup/setup.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
+import { ExportModule } from './export/export.module';
+
+const isTest = process.env.NODE_ENV === 'test';
 
 @Module({
   imports: [
@@ -34,7 +38,8 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
       password: process.env.DATABASE_PASSWORD || 'secret',
       database: process.env.DATABASE_NAME || 'accounting',
       autoLoadEntities: true,
-      synchronize: false, // CRITICAL: Disable for production
+      synchronize: isTest, // Use TypeORM synchronize for tests; migrations for production
+      namingStrategy: new SnakeNamingStrategy(),
       logging: process.env.NODE_ENV === 'development',
     }),
     ScheduleModule.forRoot(),
@@ -50,9 +55,9 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
     ReportsModule,
     CurrenciesModule,
     AdminModule,
-    SchemaInitModule, // SchemaInitModule runs first to create tables
     SeedsModule,
     SetupModule,
+    ExportModule,
   ],
 })
 export class AppModule implements NestModule {

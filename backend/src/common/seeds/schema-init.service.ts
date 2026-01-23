@@ -88,8 +88,10 @@ export class SchemaInitService implements OnModuleInit {
           currency VARCHAR(10) DEFAULT 'USD',
           balance DECIMAL(20, 8) DEFAULT 0,
           parent_id UUID,
+          mpath TEXT,
           path TEXT,
           depth INTEGER DEFAULT 0,
+          is_active BOOLEAN DEFAULT true,
           tenant_id UUID NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -107,6 +109,8 @@ export class SchemaInitService implements OnModuleInit {
           date TIMESTAMP WITH TIME ZONE NOT NULL,
           status VARCHAR(20) DEFAULT 'pending',
           tags TEXT[],
+          reference_id VARCHAR(255),
+          is_pending BOOLEAN DEFAULT false,
           tenant_id UUID NOT NULL,
           created_by UUID,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -120,8 +124,9 @@ export class SchemaInitService implements OnModuleInit {
       await queryRunner.query(`
         CREATE TABLE IF NOT EXISTS journal_lines (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          entry_id UUID NOT NULL,
+          journal_entry_id UUID NOT NULL,
           account_id UUID NOT NULL,
+          amount DECIMAL(20, 4) DEFAULT 0,
           debit DECIMAL(20, 8) DEFAULT 0,
           credit DECIMAL(20, 8) DEFAULT 0,
           currency VARCHAR(10) DEFAULT 'USD',
@@ -309,7 +314,7 @@ export class SchemaInitService implements OnModuleInit {
     // Journal indexes
     await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_journal_entries_tenant ON journal_entries(tenant_id)`);
     await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_journal_entries_date ON journal_entries(date)`);
-    await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_journal_lines_entry ON journal_lines(entry_id)`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_journal_lines_entry ON journal_lines(journal_entry_id)`);
     await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_journal_lines_account ON journal_lines(account_id)`);
     
     // Budgets indexes

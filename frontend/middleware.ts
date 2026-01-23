@@ -6,6 +6,14 @@ export default withAuth(
     const token = req.nextauth.token;
     const path = req.nextUrl.pathname;
 
+    // Root path - redirect authenticated users to dashboard
+    if (path === '/') {
+      if (token) {
+        return NextResponse.redirect(new URL('/dashboard', req.url));
+      }
+      return NextResponse.next();
+    }
+
     // Setup route - allow unauthenticated access (system not initialized)
     // This prevents redirect loops during initial setup
     if (path.startsWith('/setup')) {
@@ -43,8 +51,8 @@ export default withAuth(
     callbacks: {
       authorized: ({ token, req }) => {
         const path = req.nextUrl.pathname;
-        // Allow unauthenticated access to setup routes
-        if (path.startsWith('/setup')) {
+        // Allow unauthenticated access to root and setup routes
+        if (path === '/' || path.startsWith('/setup')) {
           return true;
         }
         // All other matched routes require authentication
@@ -56,6 +64,7 @@ export default withAuth(
 
 export const config = {
   matcher: [
+    '/',
     '/setup/:path*',
     '/admin/:path*',
     '/dashboard/:path*',
