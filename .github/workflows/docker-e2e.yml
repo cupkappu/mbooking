@@ -154,7 +154,7 @@ jobs:
 
       - name: Frontend Type Check
         working-directory: ./frontend
-        run: npm run type-check
+        run: npx tsc --noEmit
 
       - name: Backend Type Check
         working-directory: ./backend
