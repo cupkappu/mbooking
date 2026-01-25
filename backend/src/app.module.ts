@@ -17,7 +17,6 @@ import { ReportsModule } from './reports/reports.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { AdminModule } from './admin/admin.module';
 // SchemaInitModule removed - use TypeORM synchronize for tests instead
-import { SeedsModule } from './common/seeds/seeds.module';
 import { SetupModule } from './setup/setup.module';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { ExportModule } from './export/export.module';
@@ -55,7 +54,6 @@ const isTest = process.env.NODE_ENV === 'test';
     ReportsModule,
     CurrenciesModule,
     AdminModule,
-    SeedsModule,
     SetupModule,
     ExportModule,
   ],

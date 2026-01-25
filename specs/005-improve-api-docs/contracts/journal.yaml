@@ -1,0 +1,300 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Multi-Currency Accounting API - Journal",
+    "version": "1.0.0",
+    "description": "日记账管理API - Double-entry bookkeeping journal entries"
+  },
+  "paths": {
+    "/api/v1/journal": {
+      "get": {
+        "tags": ["日记账"],
+        "summary": "获取日记账条目列表",
+        "description": "分页获取所有日记账条目，支持偏移量分页",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "分页偏移量，默认0"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20
+            },
+            "description": "每页数量，默认20"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功返回日记账条目列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/JournalEntry" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["日记账"],
+        "summary": "创建日记账条目",
+        "description": "创建新的日记账条目，必须包含至少两条借贷相等的分录",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateJournalEntry" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "日记账条目创建成功"
+          },
+          "400": {
+            "description": "请求参数验证失败 - 借贷不平衡或缺少必填字段"
+          }
+        }
+      }
+    },
+    "/api/v1/journal/{id}": {
+      "get": {
+        "tags": ["日记账"],
+        "summary": "根据ID获取日记账条目",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "日记账条目ID",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功返回日记账条目"
+          },
+          "404": {
+            "description": "日记账条目不存在"
+          }
+        }
+      },
+      "put": {
+        "tags": ["日记账"],
+        "summary": "更新日记账条目",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "日记账条目ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateJournalEntry" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "日记账条目更新成功"
+          },
+          "404": {
+            "description": "日记账条目不存在"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["日记账"],
+        "summary": "删除日记账条目",
+        "description": "软删除日记账条目，设置deleted_at时间戳",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "日记账条目ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "日记账条目删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "日记账条目不存在"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "JournalLine": {
+        "type": "object",
+        "description": "日记账分录行",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "账户ID"
+          },
+          "debit": {
+            "type": "string",
+            "description": "借方金额（DECIMAL类型）"
+          },
+          "credit": {
+            "type": "string",
+            "description": "贷方金额（DECIMAL类型）"
+          },
+          "currency": {
+            "type": "string",
+            "description": "货币代码（ISO 4217）",
+            "example": "USD"
+          },
+          "description": {
+            "type": "string",
+            "description": "分录描述"
+          }
+        }
+      },
+      "JournalEntry": {
+        "type": "object",
+        "description": "日记账条目",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "日记账条目ID"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "租户ID"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "日记账日期"
+          },
+          "description": {
+            "type": "string",
+            "description": "日记账描述"
+          },
+          "reference": {
+            "type": "string",
+            "description": "参考编号"
+          },
+          "lines": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/JournalLine" },
+            "description": "分录行列表"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "创建时间"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "更新时间"
+          }
+        }
+      },
+      "CreateJournalEntry": {
+        "type": "object",
+        "required": ["date", "description", "lines"],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "日记账日期",
+            "example": "2024-01-15"
+          },
+          "description": {
+            "type": "string",
+            "description": "日记账描述",
+            "example": "购买办公设备"
+          },
+          "reference": {
+            "type": "string",
+            "description": "参考编号",
+            "example": "PO-2024-001"
+          },
+          "lines": {
+            "type": "array",
+            "minItems": 2,
+            "items": { "$ref": "#/components/schemas/JournalLine" },
+            "description": "分录行列表（至少两条，借贷必须相等）"
+          }
+        }
+      },
+      "UpdateJournalEntry": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "日记账日期"
+          },
+          "description": {
+            "type": "string",
+            "description": "日记账描述"
+          },
+          "reference": {
+            "type": "string",
+            "description": "参考编号"
+          },
+          "lines": {
+            "type": "array",
+            "minItems": 2,
+            "items": { "$ref": "#/components/schemas/JournalLine" },
+            "description": "分录行列表"
+          }
+        }
+      }
+    }
+  }
+}
