@@ -55,8 +55,6 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: mca_frontend_test
-    env_file:
-      - .env.test.local
     ports:
       - "8068:3000"
     depends_on:
