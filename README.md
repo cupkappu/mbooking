@@ -12,14 +12,15 @@ A beautiful, full-featured personal accounting software with multi-currency supp
 - **Reports**: Balance sheet and income statement generation
 - **Plugin System**: Extendable rate providers (JS plugins + REST API)
 - **Authentication**: Auth.js with OAuth and Authelia support
+- **Multi-Tenancy**: Row Level Security (RLS) for data isolation
 
 ## Tech Stack
 
 ### Frontend
 - Next.js 14 (App Router)
 - Tailwind CSS + shadcn/ui
-- TanStack Query
-- NextAuth.js
+- React Query (TanStack Query)
+- Auth.js
 
 ### Backend
 - NestJS 10
@@ -27,12 +28,11 @@ A beautiful, full-featured personal accounting software with multi-currency supp
 - PostgreSQL 15
 - Passport JWT
 
-## Getting Started
+## Quick Start
 
 ### Prerequisites
 - Node.js 20+
 - Docker & Docker Compose
-- PostgreSQL 15 (if not using Docker)
 
 ### Installation
 
@@ -58,18 +58,78 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-5. Or run locally:
-```bash
-# Terminal 1 - Backend
-cd backend
-npm run start:dev
+5. Access the application:
+   - Frontend: http://localhost:8068
+   - Backend API: http://localhost:8067
+   - API Docs: http://localhost:8067/api/docs
 
-# Terminal 2 - Frontend
-cd frontend
-npm run dev
+### Local Development
+
+```bash
+# Terminal 1 - Backend (port 3001)
+cd backend && npm run start:dev
+
+# Terminal 2 - Frontend (port 3000)
+cd frontend && npm run dev
 ```
 
-### Environment Variables
+## Project Structure
+
+```
+multi_currency_accounting/
+├── frontend/              # Next.js 14 frontend (App Router)
+│   ├── app/              # Pages and layouts
+│   ├── components/       # React components
+│   ├── hooks/            # Custom React hooks
+│   ├── lib/              # Utilities and configurations
+│   └── types/            # TypeScript types
+├── backend/              # NestJS 10 backend
+│   ├── src/
+│   │   ├── auth/         # Authentication module
+│   │   ├── accounts/     # Account management
+│   │   ├── journal/      # Journal entries
+│   │   ├── query/        # Query engine
+│   │   ├── rates/        # Exchange rates
+│   │   └── users/        # User management
+│   └── plugins/          # Rate provider plugins
+├── docs/                 # Documentation
+│   ├── requirements/     # Feature requirements
+│   └── plans/            # Design documents
+└── scripts/              # Utility scripts
+```
+
+## Development
+
+### Running Tests
+
+**Using Docker test environment (recommended):**
+```bash
+./scripts/verify-and-test.sh
+```
+
+**Or manually:**
+```bash
+# Start test containers
+docker compose -f docker-compose.test.yml up -d --build
+
+# Run E2E tests
+npm run test:e2e
+
+# Backend tests with coverage
+cd backend && npm run test:cov
+```
+
+### Building for Production
+```bash
+npm run build
+```
+
+### Docker Production Deployment
+```bash
+docker-compose up -d --build
+```
+
+## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
@@ -83,52 +143,27 @@ npm run dev
 | NEXTAUTH_URL | NextAuth URL | http://localhost:3000 |
 | NEXT_PUBLIC_API_URL | Backend API URL | http://localhost:3001 |
 
-## Project Structure
+## Docker Services
 
-```
-multi_currency_accounting/
-├── frontend/              # Next.js frontend
-│   ├── app/              # App Router pages
-│   ├── components/       # React components
-│   ├── hooks/           # Custom hooks
-│   ├── lib/             # Utilities
-│   └── types/           # TypeScript types
-├── backend/              # NestJS backend
-│   ├── src/
-│   │   ├── auth/        # Authentication module
-│   │   ├── accounts/    # Account management
-│   │   ├── journal/     # Journal entries
-│   │   ├── query/       # Query engine
-│   │   ├── rates/       # Exchange rates
-│   │   └── ...
-│   └── plugins/         # Rate provider plugins
-├── shared/              # Shared types
-└── docs/                # Documentation
-```
+| Service | Port | Internal |
+|---------|------|----------|
+| PostgreSQL | 5432 | 5432 |
+| Backend | 8067 | 3001 |
+| Frontend | 8068 | 3000 |
 
-## API Documentation
+## Documentation
 
-Once the backend is running, access Swagger documentation at:
-```
-http://localhost:3001/api/docs
-```
+- [Product Requirements](/docs/PRD.md)
+- [API Requirements](/docs/requirements/REQUIREMENTS_API.md)
+- [Database Schema](/docs/requirements/REQUIREMENTS_DATABASE.md)
+- [Agent Conventions](/docs/requirements/AGENTS.md)
 
-## Development
+## Contributing
 
-### Running Tests
-```bash
-npm test
-```
-
-### Building for Production
-```bash
-npm run build
-```
-
-### Docker Production Deployment
-```bash
-docker-compose -f docker-compose.yml up -d --build
-```
+1. Follow the conventions in `docs/requirements/AGENTS.md`
+2. Ensure all tests pass before submitting
+3. Use feature branches and create pull requests
+4. Add proper documentation for new features
 
 ## License
 
