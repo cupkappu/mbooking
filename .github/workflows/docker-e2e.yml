@@ -15,6 +15,26 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
 
+    env:
+      CI: true
+      # Database
+      DATABASE_HOST: postgres_test
+      DATABASE_PORT: 5432
+      DATABASE_USER: test
+      DATABASE_PASSWORD: test
+      DATABASE_NAME: test_db
+      # JWT
+      JWT_SECRET: test-jwt-secret-key-min-32-characters-long
+      AUTH_SECRET: test-auth-secret
+      # Auth.js
+      NEXTAUTH_URL: http://localhost:8068
+      NEXTAUTH_SECRET: test-nextauth-secret-key-min-32-characters-long-here
+      # API
+      NEXT_PUBLIC_API_URL: http://backend_test:3001
+      # Node Environment
+      NODE_ENV: test
+      INIT_SECRET: init_secret
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
