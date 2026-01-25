@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
-import { PeriodType } from '../budget.entity';
+import { PeriodType } from './budget.entity';
 
 export enum TemplateCategory {
   PERSONAL = 'personal',

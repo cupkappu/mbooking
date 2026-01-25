@@ -39,6 +39,7 @@ services:
       DATABASE_NAME: test_db
       JWT_SECRET: test-jwt-secret-key-min-32-chars-long
       AUTH_SECRET: test-auth-secret
+      INIT_SECRET: init_secret
       NODE_ENV: test
       PORT: 3001
     ports:

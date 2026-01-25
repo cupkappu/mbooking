@@ -8,6 +8,7 @@ import { TenantContext } from '../common/context/tenant.context';
 import { CurrenciesService } from '../currencies/currencies.service';
 import { RateGraphEngine } from '../rates/rate-graph-engine';
 import { TenantsService } from '../tenants/tenants.service';
+import { BudgetProgressService } from '../budgets/services/budget-progress.service';
 
 export type JournalLineWithConverted = JournalLine & {
   exchange_rate: number | null;
@@ -30,6 +31,8 @@ export class JournalService {
     private currenciesService: CurrenciesService,
     private rateGraphEngine: RateGraphEngine,
     private tenantsService: TenantsService,
+    @Inject(forwardRef(() => BudgetProgressService))
+    private budgetProgressService: BudgetProgressService,
   ) {}
 
   private getTenantId(): string {
@@ -192,6 +195,9 @@ export class JournalService {
     savedEntry.lines = lines;
 
     this.queryService.invalidateCache('balances:*');
+
+    // Trigger budget progress cache update for affected budgets
+    await this.budgetProgressService.onJournalEntryCreated(lines);
 
     return savedEntry;
   }

@@ -1,0 +1,829 @@
+openapi: 3.0.3
+info:
+  title: Budget Management API
+  description: API for managing budgets, alerts, templates, and variance reports
+  version: 1.0.0
+  contact:
+    name: Multi-Currency Accounting
+
+servers:
+  - url: /api/v1
+    description: Base API path
+
+tags:
+  - name: Budgets
+    description: Budget management operations
+  - name: Budget Alerts
+    description: Budget alert operations
+  - name: Budget Templates
+    description: Budget template operations
+
+paths:
+  /budgets:
+    get:
+      tags:
+        - Budgets
+      summary: List all budgets
+      description: Returns a paginated list of budgets for the current tenant
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, all]
+            default: active
+          description: Filter by budget status
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [periodic, non_periodic]
+          description: Filter by budget type
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search by budget name
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Items per page
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetListResponse'
+
+    post:
+      tags:
+        - Budgets
+      summary: Create a new budget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBudgetDto'
+      responses:
+        '201':
+          description: Budget created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /budgets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Budget UUID
+
+    get:
+      tags:
+        - Budgets
+      summary: Get budget details
+      responses:
+        '200':
+          description: Budget details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetDetailResponse'
+        '404':
+          description: Budget not found
+
+    put:
+      tags:
+        - Budgets
+      summary: Update a budget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBudgetDto'
+      responses:
+        '200':
+          description: Budget updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetResponse'
+        '400':
+          description: Validation error
+        '404':
+          description: Budget not found
+
+    delete:
+      tags:
+        - Budgets
+      summary: Soft delete a budget
+      responses:
+        '200':
+          description: Budget deleted successfully
+        '404':
+          description: Budget not found
+
+  /budgets/{id}/progress:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Budgets
+      summary: Get budget progress
+      responses:
+        '200':
+          description: Budget progress data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetProgressResponse'
+
+  /budgets/{id}/alerts:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Budget Alerts
+      summary: Get budget alerts
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, acknowledged, dismissed]
+          description: Filter by alert status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Maximum number of alerts
+      responses:
+        '200':
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertListResponse'
+
+  /budgets/{id}/variance:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Budgets
+      summary: Get budget variance report
+      parameters:
+        - name: granularity
+          in: query
+          schema:
+            type: string
+            enum: [daily, weekly, monthly]
+            default: weekly
+          description: Data granularity
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Start date for report
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: End date for report
+      responses:
+        '200':
+          description: Variance report data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VarianceReportResponse'
+
+  /budget-alerts/{alertId}/acknowledge:
+    parameters:
+      - name: alertId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    post:
+      tags:
+        - Budget Alerts
+      summary: Acknowledge an alert
+      responses:
+        '200':
+          description: Alert acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertResponse'
+
+  /budget-alerts/{alertId}/dismiss:
+    parameters:
+      - name: alertId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    post:
+      tags:
+        - Budget Alerts
+      summary: Dismiss an alert
+      responses:
+        '200':
+          description: Alert dismissed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertResponse'
+
+  /budget-templates:
+    get:
+      tags:
+        - Budget Templates
+      summary: List all templates
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [personal, business, savings, expense, custom]
+          description: Filter by category
+        - name: include_system
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Include system templates
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search templates
+      responses:
+        '200':
+          description: Template list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+
+    post:
+      tags:
+        - Budget Templates
+      summary: Create a custom template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateDto'
+      responses:
+        '201':
+          description: Template created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateResponse'
+
+  /budget-templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags:
+        - Budget Templates
+      summary: Get template details
+      responses:
+        '200':
+          description: Template details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateResponse'
+
+    put:
+      tags:
+        - Budget Templates
+      summary: Update a custom template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplateDto'
+      responses:
+        '200':
+          description: Template updated
+        '403':
+          description: Cannot modify system template
+
+    delete:
+      tags:
+        - Budget Templates
+      summary: Delete a custom template
+      responses:
+        '200':
+          description: Template deleted
+        '403':
+          description: Cannot delete system template
+
+  /budgets/summary/multicurrency:
+    get:
+      tags:
+        - Budgets
+      summary: Get multi-currency budget summary
+      parameters:
+        - name: base_currency
+          in: query
+          schema:
+            type: string
+            default: USD
+          description: Base currency for conversion
+      responses:
+        '200':
+          description: Multi-currency summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MultiCurrencySummaryResponse'
+
+components:
+  schemas:
+    # Common Types
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    # Budget Types
+    BudgetType:
+      type: string
+      enum: [periodic, non_periodic]
+
+    PeriodType:
+      type: string
+      enum: [monthly, weekly, yearly]
+
+    BudgetStatus:
+      type: string
+      enum: [normal, warning, exceeded]
+
+    Budget:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/BudgetType'
+        amount:
+          type: number
+        currency:
+          type: string
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        period_type:
+          $ref: '#/components/schemas/PeriodType'
+        spent_amount:
+          type: number
+        spent_currency:
+          type: string
+        alert_threshold:
+          type: number
+          nullable: true
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateBudgetDto:
+      type: object
+      required:
+        - name
+        - type
+        - amount
+        - currency
+        - start_date
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        type:
+          $ref: '#/components/schemas/BudgetType'
+        amount:
+          type: number
+          minimum: 0.01
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 10
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        period_type:
+          $ref: '#/components/schemas/PeriodType'
+        account_id:
+          type: string
+          format: uuid
+        alert_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    UpdateBudgetDto:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        amount:
+          type: number
+          minimum: 0.01
+        end_date:
+          type: string
+          format: date
+        alert_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    BudgetListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Budget'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    BudgetDetailResponse:
+      type: object
+      properties:
+        budget:
+          $ref: '#/components/schemas/Budget'
+        account:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            path:
+              type: string
+
+    BudgetProgressResponse:
+      type: object
+      properties:
+        budget_id:
+          type: string
+          format: uuid
+        spent_amount:
+          type: number
+        remaining_amount:
+          type: number
+        percentage_used:
+          type: number
+        days_remaining:
+          type: integer
+        projected_spend:
+          type: number
+        status:
+          $ref: '#/components/schemas/BudgetStatus'
+
+    # Alert Types
+    AlertType:
+      type: string
+      enum: [budget_warning, budget_exceeded, budget_depleted, budget_period_end]
+
+    AlertStatus:
+      type: string
+      enum: [pending, sent, acknowledged, dismissed]
+
+    BudgetAlert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        budget_id:
+          type: string
+          format: uuid
+        alert_type:
+          $ref: '#/components/schemas/AlertType'
+        status:
+          $ref: '#/components/schemas/AlertStatus'
+        threshold_percent:
+          type: number
+        spent_amount:
+          type: number
+        budget_amount:
+          type: number
+        currency:
+          type: string
+        message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        acknowledged_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    AlertListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetAlert'
+        total:
+          type: integer
+
+    AlertResponse:
+      type: object
+      properties:
+        alert:
+          $ref: '#/components/schemas/BudgetAlert'
+
+    # Template Types
+    TemplateCategory:
+      type: string
+      enum: [personal, business, savings, expense, custom]
+
+    BudgetTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        category:
+          $ref: '#/components/schemas/TemplateCategory'
+        is_system_template:
+          type: boolean
+        default_period_type:
+          $ref: '#/components/schemas/PeriodType'
+        default_amount:
+          type: number
+          nullable: true
+        default_currency:
+          type: string
+        default_alert_threshold:
+          type: number
+          nullable: true
+        suggested_categories:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CreateTemplateDto:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/TemplateCategory'
+        default_period_type:
+          $ref: '#/components/schemas/PeriodType'
+        default_amount:
+          type: number
+          minimum: 0.01
+        default_currency:
+          type: string
+        default_alert_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+        suggested_categories:
+          type: array
+          items:
+            type: string
+
+    UpdateTemplateDto:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        default_amount:
+          type: number
+        default_alert_threshold:
+          type: number
+        suggested_categories:
+          type: array
+          items:
+            type: string
+
+    TemplateListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetTemplate'
+        total:
+          type: integer
+
+    TemplateResponse:
+      type: object
+      properties:
+        template:
+          $ref: '#/components/schemas/BudgetTemplate'
+
+    # Variance Report Types
+    VarianceReportResponse:
+      type: object
+      properties:
+        budget_id:
+          type: string
+          format: uuid
+        budget_name:
+          type: string
+        period:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date
+            end:
+              type: string
+              format: date
+        original_budget:
+          type: number
+        revised_budget:
+          type: number
+        total_commitments:
+          type: number
+        actual_spending:
+          type: number
+        budget_variance:
+          type: number
+        budget_variance_percentage:
+          type: number
+        favorable_variance:
+          type: number
+        unfavorable_variance:
+          type: number
+        spending_velocity:
+          type: number
+        projected_end_balance:
+          type: number
+        trend:
+          type: array
+          items:
+            type: object
+            properties:
+              period:
+                type: string
+              cumulative_budget:
+                type: number
+              cumulative_actual:
+                type: number
+              cumulative_variance:
+                type: number
+
+    # Multi-Currency Summary Types
+    MultiCurrencySummaryResponse:
+      type: object
+      properties:
+        base_currency:
+          type: string
+        total_budget:
+          type: number
+        total_spent:
+          type: number
+        total_remaining:
+          type: number
+        utilization_percentage:
+          type: number
+        by_currency:
+          type: array
+          items:
+            type: object
+            properties:
+              currency:
+                type: string
+              original_amount:
+                type: number
+              converted_amount:
+                type: number
+              exchange_rate:
+                type: number
+        currency_exposure_risk:
+          type: string
+          enum: [low, medium, high]
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []

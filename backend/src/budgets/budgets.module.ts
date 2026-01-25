@@ -8,8 +8,11 @@ import { Account } from '../accounts/account.entity';
 import { BudgetsService } from './budgets.service';
 import { BudgetAlertService } from './budget-alert.service';
 import { BudgetTemplateService } from './budget-template.service';
+import { BudgetProgressService } from './services/budget-progress.service';
+import { TemplateSeedingService } from './services/template-seeding.service';
 import { BudgetsController } from './budgets.controller';
 import { QueryModule } from '../query/query.module';
+import { BudgetAmountValidator } from './validators/budget-amount.validator';
 
 @Module({
   imports: [
@@ -17,7 +20,7 @@ import { QueryModule } from '../query/query.module';
     QueryModule,
   ],
   controllers: [BudgetsController],
-  providers: [BudgetsService, BudgetAlertService, BudgetTemplateService],
-  exports: [BudgetsService, BudgetAlertService, BudgetTemplateService],
+  providers: [BudgetsService, BudgetAlertService, BudgetTemplateService, BudgetProgressService, TemplateSeedingService, BudgetAmountValidator],
+  exports: [BudgetsService, BudgetAlertService, BudgetTemplateService, BudgetProgressService, TemplateSeedingService, BudgetAmountValidator],
 })
 export class BudgetsModule {}

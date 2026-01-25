@@ -134,7 +134,15 @@ export class BudgetAlertService {
     return { start_date: startDate, end_date: endDate };
   }
 
-  private async findExistingAlert(budgetId: string, alertType: AlertType): Promise<BudgetAlert | null> {
+  /**
+   * Find existing alert for budget and alert type within 24-hour window
+   * FR-C008: Same alert type for same budget is not sent more than once in 24 hours
+   * 
+   * @param budgetId - The budget ID to check
+   * @param alertType - The type of alert to check
+   * @returns The existing alert if found, null otherwise
+   */
+  async findExistingAlert(budgetId: string, alertType: AlertType): Promise<BudgetAlert | null> {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     return this.alertRepository.findOne({
@@ -143,6 +151,26 @@ export class BudgetAlertService {
         alert_type: alertType,
         status: AlertStatus.PENDING,
         created_at: MoreThanOrEqual(oneDayAgo),
+      },
+    });
+  }
+
+  /**
+   * Check for duplicate alert using sent_at timestamp
+   * FR-C009: Additional deduplication check using sent_at
+   * 
+   * @param budgetId - The budget ID to check
+   * @param alertType - The type of alert to check
+   * @returns The existing alert if found within 24 hours of sent_at, null otherwise
+   */
+  async findExistingAlertBySentAt(budgetId: string, alertType: AlertType): Promise<BudgetAlert | null> {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    return this.alertRepository.findOne({
+      where: {
+        budget_id: budgetId,
+        alert_type: alertType,
+        sent_at: MoreThanOrEqual(oneDayAgo),
       },
     });
   }

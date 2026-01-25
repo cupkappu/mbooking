@@ -8,6 +8,7 @@ import { QueryModule } from '../query/query.module';
 import { CurrenciesModule } from '../currencies/currencies.module';
 import { RatesModule } from '../rates/rates.module';
 import { TenantsModule } from '../tenants/tenants.module';
+import { BudgetsModule } from '../budgets/budgets.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TenantsModule } from '../tenants/tenants.module';
     CurrenciesModule,
     RatesModule,
     TenantsModule,
+    forwardRef(() => BudgetsModule),
   ],
   controllers: [JournalController],
   providers: [JournalService],
