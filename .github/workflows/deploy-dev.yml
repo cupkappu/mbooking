@@ -96,8 +96,8 @@ jobs:
             cd ${{ secrets.DEPLOY_NODE_PATH }}
 
             # Determine image tags
-            BACKEND_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.backend_image || 'latest' }}"
-            FRONTEND_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.frontend_image || 'latest' }}"
+            BACKEND_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.backend_image || 'master' }}"
+            FRONTEND_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.frontend_image || 'master' }}"
 
             echo "=== Pulling backend image: \$BACKEND_TAG ==="
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE }}:\${BACKEND_TAG}-backend || true
