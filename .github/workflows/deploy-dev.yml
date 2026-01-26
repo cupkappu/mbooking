@@ -1,5 +1,5 @@
 # Cloudflare WARP SSH Deployment
-# Pulls pre-built images from GHCR and deploys to dev server
+# Connects to private network via Cloudflare Zero Trust WARP, then SSH to dev server
 #
 # Triggers:
 # - Manual: workflow_dispatch (GitHub Actions UI)
@@ -48,11 +48,6 @@ jobs:
           sparse-checkout: |
             docker-compose.prod.yml
 
-      - name: Install cloudflared
-        uses: ./.github/actions/cloudflared
-        with:
-          version: 2024.11.0
-
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
@@ -61,12 +56,26 @@ jobs:
           echo "${{ secrets.DEPLOY_NODE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-      - name: Deploy via Cloudflare WARP
-        run: |
-          # Connect to Cloudflare network via WARP
-          cloudflared access ssh --hostname ${{ secrets.DEPLOY_NODE_ADDR }}
+      - name: Setup Cloudflare WARP
+        uses: furykerry/setup-cloudflare-warp@master
+        with:
+          cloudflare_warp_version: 2024.11.0
+          api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
-          # SSH directly to server IP (now accessible through WARP)
+      - name: Connect to private network via WARP
+        run: |
+          # Connect to Cloudflare WARP (VPN into private network)
+          warp-cli connect
+
+          # Verify connection
+          warp-cli status
+
+          # Wait a moment for network to be ready
+          sleep 3
+
+      - name: Deploy via SSH
+        run: |
+          # SSH directly to dev server IP (now reachable through WARP)
           ssh -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             -o BatchMode=yes \
@@ -110,3 +119,7 @@ jobs:
             echo "Deployment completed (timeout reached)"
             docker-compose -f docker-compose.prod.yml ps
           EOF
+
+      - name: Disconnect WARP
+        if: always()
+        run: warp-cli disconnect || true
