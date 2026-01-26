@@ -25,17 +25,31 @@ GitHub Actions                      Cloudflare Zero Trust           Dev Server
 
 ## Step 1: Configure Cloudflare Zero Trust
 
-### 1.1 Create WARP Token
+### 1.1 Create Service Token
 
 1. Go to [Cloudflare Zero Trust](https://one.dash.cloudflare.com/)
-2. Navigate to **Settings** > **WARP**
-3. Scroll to **Client enumeration** section
-4. Copy the **WARP service token** (or create a new one if needed)
+2. Navigate to **Access** > **Service Auth**
+3. Click **Create Service Token**
+4. Configure:
+   - **Name**: `github-actions-deploy`
+   - **Service Token Duration**: As needed
+5. Copy the `Client ID` and `Client Secret`
+6. **Important**: Save the secret - it won't be shown again!
 
-### 1.2 Get Team ID (Optional)
+### 1.2 Get Organization Name
 
 1. Go to **Settings** > **General**
-2. Copy the **Team ID** (e.g., `abcdef123456`)
+2. Copy the **Organization name** (e.g., `mycompany`)
+
+### 1.3 Create Enrollment Policy
+
+1. Go to **Devices** > **Enrollment**
+2. Click **Add a policy**
+3. Configure:
+   - **Name**: `Allow GitHub Actions`
+   - **Action**: Service Auth
+   - **Selector**: Service Token
+   - **Value**: Select your service token `github-actions-deploy`
 
 ## Step 2: Prepare Dev Server
 
@@ -70,7 +84,9 @@ Go to **Settings > Secrets and variables > Actions**:
 
 | Secret | Description | Example |
 |--------|-------------|---------|
-| `CLOUDFLARE_WARP_TOKEN` | WARP service token | `eyJh...` |
+| `CLOUDFLARE_ORG` | Zero Trust organization name | `mycompany` |
+| `CLOUDFLARE_AUTH_CLIENT_ID` | Service token Client ID | `abc123...` |
+| `CLOUDFLARE_AUTH_CLIENT_SECRET` | Service token Client Secret | `xyz789...` |
 | `DEPLOY_NODE_USER` | SSH username | `deploy` |
 | `DEPLOY_NODE_ADDR` | Server IP (private network) | `192.168.1.100` |
 | `DEPLOY_NODE_PATH` | Project directory | `/opt/multi-currency-accounting` |
@@ -85,31 +101,30 @@ ssh-keyscan -t ed25519 192.168.1.100
 
 ## How It Works
 
-1. **cloudflared** is installed on GitHub Actions runner
-2. **cloudflared warp-svc login --token** authenticates with Cloudflare
-3. **cloudflared connect** creates a tunnel - GitHub Actions is now "inside" your private network
-4. **ssh deploy@[server-ip]** SSH directly to server (now reachable)
-5. **docker-compose** pulls images from GHCR and starts services
+1. **Boostport/setup-cloudflare-warp** installs and configures WARP client
+2. **warp-cli connect** connects GitHub Actions to your private network via WARP
+3. **ssh deploy@[server-ip]** SSH directly to server (now reachable)
+4. **docker-compose** pulls images from GHCR and starts services
 
 ## Testing
 
 ### Local Test
 
 ```bash
-# Install cloudflared
-curl -L -o /usr/local/bin/cloudflared \
-  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-chmod +x /usr/local/bin/cloudflared
+# Install WARP client (Ubuntu/Debian)
+curl https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+sudo apt-get update && sudo apt-get install cloudflare-warp
 
-# Connect to WARP
-cloudflared warp-svc login --token your-warp-token
-cloudflared connect
+# Connect using service token
+warp-cli login --organization mycompany --auth-client-id abc123 --auth-client-secret xyz789
+warp-cli connect
 
 # SSH to dev server
 ssh deploy@192.168.1.100
 
 # Disconnect when done
-cloudflared disconnect
+warp-cli disconnect
 ```
 
 ## Troubleshooting
@@ -117,17 +132,18 @@ cloudflared disconnect
 ### Connection Fails
 
 ```bash
-# Check cloudflared status
-cloudflared warp-svc status
+# Check WARP status
+warp-cli status
 
-# Verify token
-cloudflared warp-svc login --token your-token
+# Verify service token
+warp-cli login --organization mycompany --auth-client-id abc123 --auth-client-secret xyz789
 
 # Check logs
-journalctl -u cloudflared
+journalctl -u warp-svc
 
-# or for the connect command
-cloudflared connect --logfile /tmp/cloudflared.log --loglevel debug
+# Re-register if needed
+warp-cli registration delete
+warp-cli registration new
 ```
 
 ### SSH Connection Refused
@@ -147,11 +163,11 @@ sudo ufw status
 
 ```bash
 # Ensure WARP is connected
-cloudflared warp-svc status | grep Connected
+warp-cli status | grep Connected
 
 # Check if routing is working
 ip route
 
-# Verify WARP tunnel
-cloudflared tunnel list
+# Verify DNS resolution
+nslookup 192.168.1.100
 ```

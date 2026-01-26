@@ -56,26 +56,23 @@ jobs:
           echo "${{ secrets.DEPLOY_NODE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-      - name: Install cloudflared
-        run: |
-          curl -L -o /tmp/cloudflared \
-            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-          chmod +x /tmp/cloudflared
-          echo "/tmp" >> $GITHUB_PATH
+      - name: Setup Cloudflare WARP
+        uses: Boostport/setup-cloudflare-warp@v1
+        with:
+          organization: ${{ secrets.CLOUDFLARE_ORG }}
+          auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
+          auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
 
       - name: Connect to private network via WARP
         run: |
-          # Authenticate and connect using service token
-          /tmp/cloudflared warp-svc login --token ${{ secrets.CLOUDFLARE_WARP_TOKEN }}
-
-          # Connect to WARP (this tunnels traffic through Cloudflare to your private network)
-          /tmp/cloudflared connect
+          # Connect to WARP
+          warp-cli connect
 
           # Wait for connection to establish
-          sleep 5
+          sleep 3
 
           # Verify connection
-          /tmp/cloudflared warp-svc status
+          warp-cli status
 
       - name: Deploy via SSH
         run: |
@@ -126,4 +123,4 @@ jobs:
 
       - name: Disconnect WARP
         if: always()
-        run: /tmp/cloudflared disconnect || true
+        run: warp-cli disconnect || true
