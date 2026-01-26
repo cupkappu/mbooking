@@ -19,6 +19,7 @@ import { useState } from 'react';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard' },
+  { name: 'Budgets', href: '/budgets' },
   { name: 'Accounts', href: '/accounts' },
   { name: 'Journal', href: '/journal' },
   { name: 'Reports', href: '/reports' },
