@@ -2,11 +2,11 @@
 export const TEST_USERS = {
   admin: {
     email: 'admin@example.com',
-    password: 'password123',
+    password: 'AdminPassword123!',
   },
   user: {
     email: 'user@example.com',
-    password: 'password123',
+    password: 'TestPassword123!',
   },
 };
 

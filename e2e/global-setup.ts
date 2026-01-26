@@ -6,7 +6,7 @@
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8067';
 const INIT_SECRET = process.env.INIT_SECRET || 'init_secret';
 const TEST_EMAIL = 'admin@test.com';
-const TEST_PASSWORD = 'AdminTest123';
+const TEST_PASSWORD = 'AdminTest123!';
 const TEST_NAME = 'Test Admin';
 
 export default async () => {

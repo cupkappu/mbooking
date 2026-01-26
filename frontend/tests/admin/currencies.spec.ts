@@ -94,7 +94,7 @@ test.describe('Admin Currencies Page - Access Control', () => {
   test('should not allow regular users to access admin currencies', async ({ page }) => {
     await page.goto('/login');
     await page.fill('input[type="email"]', 'user@example.com');
-    await page.fill('input[type="password"]', 'password123');
+    await page.fill('input[type="password"]', 'TestPassword123!');
     await page.click('button[type="submit"]');
     await page.waitForURL('/dashboard');
     await page.goto('/admin/currencies');

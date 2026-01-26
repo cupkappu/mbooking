@@ -11,7 +11,7 @@ export class LoginDto {
   @IsNotEmpty()
   email: string;
 
-  @ApiProperty({ description: '用户密码', example: 'password123' })
+  @ApiProperty({ description: '用户密码', example: 'Password123!' })
   @IsString()
   @IsNotEmpty()
   @MinLength(6)
@@ -24,7 +24,7 @@ export class RegisterDto {
   @IsNotEmpty()
   email: string;
 
-  @ApiProperty({ description: '用户密码', example: 'password123' })
+  @ApiProperty({ description: '用户密码', example: 'Password123!' })
   @IsString()
   @IsNotEmpty()
   @MinLength(6)

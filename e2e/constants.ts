@@ -6,17 +6,17 @@
 // 测试账户凭证
 export const TEST_CREDENTIALS = {
   email: 'admin@test.com',
-  password: 'AdminTest123',
+  password: 'AdminTest123!',
 };
 
 // 备用管理员账户（用于需要第二个用户的测试）
 export const ADMIN_CREDENTIALS = {
   email: 'admin@example.com',
-  password: 'password123',
+  password: 'AdminPassword123!',
 };
 
 // 测试用户默认密码
-export const DEFAULT_USER_PASSWORD = 'TestPassword123';
+export const DEFAULT_USER_PASSWORD = 'TestPassword123!';
 
 // 等待超时配置
 export const TIMEOUTS = {
