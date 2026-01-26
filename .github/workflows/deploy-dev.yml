@@ -56,30 +56,27 @@ jobs:
           echo "${{ secrets.DEPLOY_NODE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-      - name: Install cloudflared
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Connect to private network via Tailscale
         run: |
-          curl -L -o /tmp/cloudflared \
-            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-          chmod +x /tmp/cloudflared
-          echo "/tmp" >> $GITHUB_PATH
+          # Wait for Tailscale to connect
+          sleep 10
 
-      - name: Connect to private network via WARP
-        run: |
-          # Authenticate and connect using service token
-          /tmp/cloudflared warp-svc login --token ${{ secrets.CLOUDFLARE_WARP_TOKEN }}
+          # Show Tailscale status
+          tailscale status
 
-          # Connect to WARP (this tunnels traffic through Cloudflare to your private network)
-          /tmp/cloudflared connect
-
-          # Wait for connection to establish
-          sleep 5
-
-          # Verify connection
-          /tmp/cloudflared warp-svc status
+          # Show available IPs
+          tailscale ip
 
       - name: Deploy via SSH
         run: |
-          # SSH directly to dev server IP (now reachable through WARP)
+          # SSH directly to dev server IP (now reachable through Tailscale)
           ssh -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             -o BatchMode=yes \
@@ -124,6 +121,6 @@ jobs:
             docker-compose -f docker-compose.prod.yml ps
           EOF
 
-      - name: Disconnect WARP
+      - name: Disconnect Tailscale
         if: always()
-        run: /tmp/cloudflared disconnect || true
+        run: tailscale down || true
