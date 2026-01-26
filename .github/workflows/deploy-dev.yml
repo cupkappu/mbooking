@@ -46,8 +46,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           sparse-checkout: |
-            docker-compose.test.yml
-            scripts
+            docker-compose.prod.yml
 
       - name: Install cloudflared
         uses: ./.github/actions/cloudflared
@@ -91,25 +90,17 @@ jobs:
             echo "=== Pulling frontend image: \$FRONTEND_TAG ==="
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE }}:\${FRONTEND_TAG}-frontend || true
 
-            # Get the image names from docker-compose config
-            COMPOSE_BACKEND=\$(docker-compose -f docker-compose.test.yml config | grep 'image:' | head -1 | awk '{print \$2}')
-            COMPOSE_FRONTEND=\$(docker-compose -f docker-compose.test.yml config | grep 'image:' | tail -1 | awk '{print \$2}')
-
-            echo "=== Tagging images for compose ==="
-            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE }}:\${BACKEND_TAG}-backend \$COMPOSE_BACKEND
-            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE }}:\${FRONTEND_TAG}-frontend \$COMPOSE_FRONTEND
-
             echo "=== Stopping existing containers ==="
-            docker-compose -f docker-compose.test.yml down || true
+            BACKEND_TAG=\$BACKEND_TAG FRONTEND_TAG=\$FRONTEND_TAG docker-compose -f docker-compose.prod.yml down || true
 
             echo "=== Starting services ==="
-            docker-compose -f docker-compose.test.yml up -d
+            BACKEND_TAG=\$BACKEND_TAG FRONTEND_TAG=\$FRONTEND_TAG docker-compose -f docker-compose.prod.yml up -d
 
             echo "=== Waiting for services to be healthy ==="
             for i in {1..60}; do
-              if docker-compose -f docker-compose.test.yml ps | grep -q "healthy"; then
+              if docker-compose -f docker-compose.prod.yml ps | grep -q "healthy"; then
                 echo "All services are healthy!"
-                docker-compose -f docker-compose.test.yml ps
+                docker-compose -f docker-compose.prod.yml ps
                 exit 0
               fi
               echo "Waiting for services... (\$i/60)"
@@ -117,5 +108,5 @@ jobs:
             done
 
             echo "Deployment completed (timeout reached)"
-            docker-compose -f docker-compose.test.yml ps
+            docker-compose -f docker-compose.prod.yml ps
           EOF
