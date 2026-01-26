@@ -8,7 +8,6 @@ RUN npm install
 
 COPY . .
 
-
 RUN npm run build
 
 # Production stage
@@ -24,10 +23,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 99999 appgroup && \
     adduser --system --uid 99999 appuser
 
-# Copy standalone output
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+# Copy built application
+COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/package.json ./
 
 # Change ownership
 RUN chown -R appuser:appgroup /app
@@ -37,4 +36,4 @@ USER appuser
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["npm", "start"]
