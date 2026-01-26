@@ -71,19 +71,19 @@ test.describe('Dashboard', () => {
 test.describe('Navigation', () => {
   test('should navigate to accounts page', async ({ page }) => {
     await login(page);
-    await page.goto('/accounts');
+    await page.goto('/accounts', { waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { name: 'Accounts', exact: true })).toBeVisible();
   });
 
   test('should navigate to journal page', async ({ page }) => {
     await login(page);
-    await page.goto('/journal');
+    await page.goto('/journal', { waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { name: 'Journal', exact: true })).toBeVisible();
   });
 
   test('should navigate to reports page', async ({ page }) => {
     await login(page);
-    await page.goto('/reports');
+    await page.goto('/reports', { waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Balance Sheet' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Income Statement' })).toBeVisible();
@@ -91,7 +91,7 @@ test.describe('Navigation', () => {
 
   test('should navigate to settings page', async ({ page }) => {
     await login(page);
-    await page.goto('/settings');
+    await page.goto('/settings', { waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   });
 });
