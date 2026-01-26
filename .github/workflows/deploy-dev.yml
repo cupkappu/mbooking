@@ -77,8 +77,8 @@ jobs:
             echo "=== Starting deployment on dev server ==="
             echo "Working directory: ${{ secrets.DEPLOY_NODE_PATH }}"
             echo "Using images from: ${{ env.REGISTRY }}/${{ env.IMAGE }}"
-            
-            midir -p ${{ secrets.DEPLOY_NODE_PATH }}
+
+            mkdir -p ${{ secrets.DEPLOY_NODE_PATH }}
 
             cd ${{ secrets.DEPLOY_NODE_PATH }}
 
