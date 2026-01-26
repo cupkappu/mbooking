@@ -14,7 +14,8 @@ test.describe('Budget Workflow E2E Tests', () => {
   });
 
   test('should load budget page', async ({ page }) => {
-    await page.goto('/budgets/1', { waitUntil: 'networkidle' });
+    await page.goto('/budgets', { waitUntil: 'networkidle' });
+    await expect(page.getByText('Budgets', { exact: true })).toBeVisible({ timeout: 30000 });
   });
 });
 
@@ -30,10 +31,12 @@ test.describe('Budget Template E2E Tests', () => {
   });
 
   test('should display budget templates', async ({ page }) => {
-    await page.goto('/budgets/1', { waitUntil: 'networkidle' });
+    await page.goto('/budgets', { waitUntil: 'networkidle' });
+    await expect(page.getByText('Budgets', { exact: true })).toBeVisible({ timeout: 30000 });
   });
 
   test('should create budget from template', async ({ page }) => {
-    await page.goto('/budgets/1', { waitUntil: 'networkidle' });
+    await page.goto('/budgets', { waitUntil: 'networkidle' });
+    await expect(page.getByText('Budgets', { exact: true })).toBeVisible({ timeout: 30000 });
   });
 });
