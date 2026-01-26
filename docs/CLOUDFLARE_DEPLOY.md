@@ -1,15 +1,15 @@
-# Cloudflare WARP SSH Deployment
+# Tailscale SSH Deployment
 
-Connects GitHub Actions to your private network via Cloudflare WARP, then SSH to dev server.
+Connects GitHub Actions to your private network via Tailscale, then SSH to dev server.
 
 ## Architecture
 
 ```
-GitHub Actions                      Cloudflare Zero Trust           Dev Server
+GitHub Actions                      Tailscale Network              Dev Server
     |                                     |                             |
-    |  1. cloudflared connect             |  WARP tunnel established   |
+    |  1. tailscale/github-action         |  Tailscale mesh network    |
     |  +------------------------------->  |  (GitHub Actions joins     |
-    |  |                                 |   your private network)     |
+    |  |                                 |   your tailnet)             |
     |  |                                 +--------------------------> |
     |  |  2. ssh deploy@[server-ip]       |                             |
     |  +-----------------------------------------------------------> |
@@ -19,37 +19,53 @@ GitHub Actions                      Cloudflare Zero Trust           Dev Server
 
 ## Prerequisites
 
-1. **Cloudflare Zero Trust** with WARP enabled
-2. **Dev server** on your private network (SSH port accessible)
+1. **Tailscale** account with admin access
+2. **Dev server** running Tailscale (joined your tailnet)
 3. **GitHub repository** with Actions enabled
 
-## Step 1: Configure Cloudflare Zero Trust
+## Step 1: Configure Tailscale
 
-### 1.1 Create Service Token
+### 1.1 Create OAuth Client
 
-1. Go to [Cloudflare Zero Trust](https://one.dash.cloudflare.com/)
-2. Navigate to **Access** > **Service Auth**
-3. Click **Create Service Token**
-4. Configure:
-   - **Name**: `github-actions-deploy`
-   - **Service Token Duration**: As needed
-5. Copy the `Client ID` and `Client Secret`
-6. **Important**: Save the secret - it won't be shown again!
-
-### 1.2 Get Organization Name
-
-1. Go to **Settings** > **General**
-2. Copy the **Organization name** (e.g., `mycompany`)
-
-### 1.3 Create Enrollment Policy
-
-1. Go to **Devices** > **Enrollment**
-2. Click **Add a policy**
+1. Go to [Tailscale Admin Console](https://login.tailscale.com/admin/oauth)
+2. Click **Generate OAuth client**
 3. Configure:
-   - **Name**: `Allow GitHub Actions`
-   - **Action**: Service Auth
-   - **Selector**: Service Token
-   - **Value**: Select your service token `github-actions-deploy`
+   - **Description**: `GitHub Actions Deploy`
+   - **Scopes**: `device:write`, `device:read`
+4. Copy the **Client ID** and **Secret**
+5. **Important**: Save the secret - it won't be shown again!
+
+### 1.2 Tag Your Dev Server
+
+On your dev server, tag it for CI access:
+
+```bash
+# Tag the device
+sudo tailscale tag --delete tag:ci 2>/dev/null || true
+sudo tailscale tag tag:ci
+
+# Or via admin console:
+# Go to Machines > Select dev server > Edit tags > Add tag:ci
+```
+
+### 1.3 ACL Configuration
+
+Ensure the tag can access your network. Edit `ACLs` in admin console:
+
+```json
+{
+  "tagOwners": {
+    "tag:ci": ["your-email@domain.com"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["tag:ci"],
+      "dst": ["100.64.0.0/10:*"]  // Allow access to all tailnet IPs
+    }
+  ]
+}
+```
 
 ## Step 2: Prepare Dev Server
 
@@ -71,6 +87,14 @@ sudo usermod -aG docker deploy
 sudo chown -R deploy:deploy /opt/multi-currency-accounting
 ```
 
+### 2.3 Get Tailscale IP
+
+Get your dev server's Tailscale IP:
+
+```bash
+tailscale ip
+```
+
 ## Step 3: Generate SSH Keys
 
 ```bash
@@ -84,26 +108,25 @@ Go to **Settings > Secrets and variables > Actions**:
 
 | Secret | Description | Example |
 |--------|-------------|---------|
-| `CLOUDFLARE_ORG` | Zero Trust organization name | `mycompany` |
-| `CLOUDFLARE_AUTH_CLIENT_ID` | Service token Client ID | `abc123...` |
-| `CLOUDFLARE_AUTH_CLIENT_SECRET` | Service token Client Secret | `xyz789...` |
+| `TS_OAUTH_CLIENT_ID` | OAuth Client ID | `abc123...` |
+| `TS_OAUTH_SECRET` | OAuth Client Secret | `xyz789...` |
 | `DEPLOY_NODE_USER` | SSH username | `deploy` |
-| `DEPLOY_NODE_ADDR` | Server IP (private network) | `192.168.1.100` |
+| `DEPLOY_NODE_ADDR` | Server Tailscale IP | `100.x.x.x` |
 | `DEPLOY_NODE_PATH` | Project directory | `/opt/multi-currency-accounting` |
 | `DEPLOY_NODE_SSH_PRIVATE_KEY` | ED25519 private key | `-----BEGIN OPENSSH...` |
-| `DEPLOY_NODE_SSH_KNOWN_HOSTS` | Server SSH host key | `192.168.1.100 ssh-ed25519...` |
+| `DEPLOY_NODE_SSH_KNOWN_HOSTS` | Server SSH host key | `100.x.x.x ssh-ed25519...` |
 
 ### Getting SSH Known Hosts
 
 ```bash
-ssh-keyscan -t ed25519 192.168.1.100
+ssh-keyscan -t ed25519 100.x.x.x
 ```
 
 ## How It Works
 
-1. **Boostport/setup-cloudflare-warp** installs and configures WARP client
-2. **warp-cli connect** connects GitHub Actions to your private network via WARP
-3. **ssh deploy@[server-ip]** SSH directly to server (now reachable)
+1. **tailscale/github-action** authenticates with OAuth and connects to your tailnet
+2. GitHub Actions is now "inside" your private network
+3. **ssh deploy@[tailscale-ip]** SSH directly to server (now reachable)
 4. **docker-compose** pulls images from GHCR and starts services
 
 ## Testing
@@ -111,20 +134,17 @@ ssh-keyscan -t ed25519 192.168.1.100
 ### Local Test
 
 ```bash
-# Install WARP client (Ubuntu/Debian)
-curl https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-sudo apt-get update && sudo apt-get install cloudflare-warp
+# Install Tailscale
+curl -fsSL https://tailscale.com/install.sh | sh
 
-# Connect using service token
-warp-cli login --organization mycompany --auth-client-id abc123 --auth-client-secret xyz789
-warp-cli connect
+# Connect using OAuth
+sudo tailscale up --oauth-client-id abc123 --oauth-secret xyz789
 
 # SSH to dev server
-ssh deploy@192.168.1.100
+ssh deploy@100.x.x.x
 
 # Disconnect when done
-warp-cli disconnect
+sudo tailscale down
 ```
 
 ## Troubleshooting
@@ -132,42 +152,52 @@ warp-cli disconnect
 ### Connection Fails
 
 ```bash
-# Check WARP status
-warp-cli status
+# Check Tailscale status
+tailscale status
 
-# Verify service token
-warp-cli login --organization mycompany --auth-client-id abc123 --auth-client-secret xyz789
+# Verify IP
+tailscale ip
 
-# Check logs
-journalctl -u warp-svc
+# Check if server is online
+tailscale ping 100.x.x.x
 
-# Re-register if needed
-warp-cli registration delete
-warp-cli registration new
+# Re-authenticate
+sudo tailscale down
+sudo tailscale up --oauth-client-id abc123 --oauth-secret xyz789
+```
+
+### Cannot Access Server
+
+```bash
+# Verify server is in tailnet
+tailscale status | grep dev-server
+
+# Check ACLs in admin console
+# Go to Settings > ACLs
+
+# Verify tag permissions
+tailscale tagged-status
 ```
 
 ### SSH Connection Refused
 
 ```bash
-# Verify server is reachable through WARP
-ping 192.168.1.100
+# Verify server is reachable through Tailscale
+ping 100.x.x.x
 
 # Check SSH is running
-ssh deploy@192.168.1.100 -v
+ssh deploy@100.x.x.x -v
 
 # Verify firewall
 sudo ufw status
 ```
 
-### Cannot Access Private IPs
+### OAuth Issues
 
 ```bash
-# Ensure WARP is connected
-warp-cli status | grep Connected
+# Verify OAuth client in admin console
+# Go to Settings > OAuth clients
 
-# Check if routing is working
-ip route
-
-# Verify DNS resolution
-nslookup 192.168.1.100
+# Regenerate if needed
+# Warning: This will invalidate the old secret
 ```

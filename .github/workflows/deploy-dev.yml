@@ -56,27 +56,27 @@ jobs:
           echo "${{ secrets.DEPLOY_NODE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-      - name: Setup Cloudflare WARP
-        uses: Boostport/setup-cloudflare-warp@v1
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v4
         with:
-          organization: ${{ secrets.CLOUDFLARE_ORG }}
-          auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
-          auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
 
-      - name: Connect to private network via WARP
+      - name: Connect to private network via Tailscale
         run: |
-          # Connect to WARP
-          warp-cli connect
+          # Wait for Tailscale to connect
+          sleep 10
 
-          # Wait for connection to establish
-          sleep 3
+          # Show Tailscale status
+          tailscale status
 
-          # Verify connection
-          warp-cli status
+          # Show available IPs
+          tailscale ip
 
       - name: Deploy via SSH
         run: |
-          # SSH directly to dev server IP (now reachable through WARP)
+          # SSH directly to dev server IP (now reachable through Tailscale)
           ssh -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
             -o BatchMode=yes \
@@ -121,6 +121,6 @@ jobs:
             docker-compose -f docker-compose.prod.yml ps
           EOF
 
-      - name: Disconnect WARP
+      - name: Disconnect Tailscale
         if: always()
-        run: warp-cli disconnect || true
+        run: tailscale down || true
