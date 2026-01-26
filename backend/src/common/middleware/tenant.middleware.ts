@@ -3,14 +3,10 @@ import { Request, Response, NextFunction } from 'express';
 import { DataSource } from 'typeorm';
 import * as jwt from 'jsonwebtoken';
 import { TenantContext } from '../context/tenant.context';
-import { RlsService } from '../rls/rls.service';
 
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
-  constructor(
-    private dataSource: DataSource,
-    private rlsService: RlsService,
-  ) {}
+  constructor(private dataSource: DataSource) {}
 
   async use(req: Request, res: Response, next: NextFunction): Promise<void> {
     // Use originalUrl since req.path might be modified by middleware chain
@@ -108,18 +104,9 @@ export class TenantMiddleware implements NestMiddleware {
       return next();
     }
 
-    TenantContext.run({ tenantId, userId, requestId }, async () => {
-      await this.setPostgresContext();
+    TenantContext.run({ tenantId, userId, requestId }, () => {
       next();
     });
-  }
-
-  private async setPostgresContext(): Promise<void> {
-    const tenantId = TenantContext.tenantId;
-    if (tenantId) {
-      // Use RlsService to set tenant context (RLS: database-level isolation)
-      await this.rlsService.setTenantContext(tenantId);
-    }
   }
 
   private getRequestId(req: Request): string {
