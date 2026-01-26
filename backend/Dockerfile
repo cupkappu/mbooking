@@ -38,6 +38,8 @@ COPY --from=builder /app/src/config ./src/config
 COPY --from=builder /app/src/migrations ./src/migrations
 COPY --from=builder /app/tsconfig.json ./
 
+COPY ./plugins ./plugins
+
 # Install ts-node for migration CLI (only for dev/test, not production)
 RUN npm install --production=false ts-node 2>/dev/null || true
 

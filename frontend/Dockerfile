@@ -28,6 +28,9 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package.json ./
 
+# Install production dependencies (next is a production dependency)
+RUN npm install --production
+
 # Change ownership
 RUN chown -R appuser:appgroup /app
 
