@@ -42,6 +42,13 @@ jobs:
     environment: dev
 
     steps:
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
