@@ -31,7 +31,7 @@ function MobileNav({ isAdmin, pathname }: { isAdmin: boolean; pathname: string }
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild className="md:hidden">
-        <button className="p-2 hover:bg-accent rounded-md">
+        <button className="p-2 hover:bg-accent rounded-md" data-testid="mobile-menu">
           <Menu className="h-5 w-5" />
           <span className="sr-only">Open menu</span>
         </button>

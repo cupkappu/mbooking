@@ -60,7 +60,7 @@ function MobileAdminNav({ pathname }: { pathname: string }) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <button className="p-2 hover:bg-accent rounded-md">
+        <button className="p-2 hover:bg-accent rounded-md" data-testid="admin-mobile-menu">
           <Menu className="h-5 w-5" />
           <span className="sr-only">Open menu</span>
         </button>
