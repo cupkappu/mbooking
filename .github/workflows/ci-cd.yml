@@ -411,3 +411,11 @@ jobs:
         run: |
           docker buildx imagetools inspect \
             ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.version }}-frontend
+
+      - name: Trigger Dev Deployment
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GH_PAT }}
+          repository: ${{ github.repository }}
+          event-type: deploy-dev
+          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'

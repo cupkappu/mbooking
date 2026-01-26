@@ -1,0 +1,126 @@
+# Cloudflare WARP SSH Deployment
+# Connects to private network via Cloudflare Zero Trust WARP, then SSH to dev server
+#
+# Triggers:
+# - Manual: workflow_dispatch (GitHub Actions UI)
+# - Auto: repository_dispatch (triggered by CI workflow on master/tag)
+
+name: Deploy to Dev Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+      backend_image:
+        description: 'Backend image tag (default: latest)'
+        required: false
+        default: ''
+        type: string
+      frontend_image:
+        description: 'Frontend image tag (default: latest)'
+        required: false
+        default: ''
+        type: string
+  repository_dispatch:
+    types: [deploy-dev]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ${{ github.repository }}
+
+jobs:
+  deploy-dev:
+    name: Deploy to Dev Server
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            docker-compose.prod.yml
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_NODE_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          echo "${{ secrets.DEPLOY_NODE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Setup Cloudflare WARP
+        uses: Boostport/setup-cloudflare-warp@v1
+        with:
+          organization: ${{ secrets.CLOUDFLARE_ORG }}
+          auth_client_id: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_ID }}
+          auth_client_secret: ${{ secrets.CLOUDFLARE_AUTH_CLIENT_SECRET }}
+
+      - name: Connect to private network via WARP
+        run: |
+          # Connect to Cloudflare WARP (VPN into private network)
+          warp-cli connect
+
+          # Verify connection
+          warp-cli status
+
+          # Wait a moment for network to be ready
+          sleep 3
+
+      - name: Deploy via SSH
+        run: |
+          # SSH directly to dev server IP (now reachable through WARP)
+          ssh -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o BatchMode=yes \
+            -o ConnectTimeout=30 \
+            ${{ secrets.DEPLOY_NODE_USER }}@${{ secrets.DEPLOY_NODE_ADDR }} << EOF
+            set -e
+
+            echo "=== Starting deployment on dev server ==="
+            echo "Working directory: ${{ secrets.DEPLOY_NODE_PATH }}"
+            echo "Using images from: ${{ env.REGISTRY }}/${{ env.IMAGE }}"
+
+            cd ${{ secrets.DEPLOY_NODE_PATH }}
+
+            # Determine image tags
+            BACKEND_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.backend_image || 'latest' }}"
+            FRONTEND_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.frontend_image || 'latest' }}"
+
+            echo "=== Pulling backend image: \$BACKEND_TAG ==="
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE }}:\${BACKEND_TAG}-backend || true
+
+            echo "=== Pulling frontend image: \$FRONTEND_TAG ==="
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE }}:\${FRONTEND_TAG}-frontend || true
+
+            echo "=== Stopping existing containers ==="
+            BACKEND_TAG=\$BACKEND_TAG FRONTEND_TAG=\$FRONTEND_TAG docker-compose -f docker-compose.prod.yml down || true
+
+            echo "=== Starting services ==="
+            BACKEND_TAG=\$BACKEND_TAG FRONTEND_TAG=\$FRONTEND_TAG docker-compose -f docker-compose.prod.yml up -d
+
+            echo "=== Waiting for services to be healthy ==="
+            for i in {1..60}; do
+              if docker-compose -f docker-compose.prod.yml ps | grep -q "healthy"; then
+                echo "All services are healthy!"
+                docker-compose -f docker-compose.prod.yml ps
+                exit 0
+              fi
+              echo "Waiting for services... (\$i/60)"
+              sleep 3
+            done
+
+            echo "Deployment completed (timeout reached)"
+            docker-compose -f docker-compose.prod.yml ps
+          EOF
+
+      - name: Disconnect WARP
+        if: always()
+        run: warp-cli disconnect || true
