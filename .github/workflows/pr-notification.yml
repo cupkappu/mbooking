@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow
+name: PR Notification
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  notify-on-pr:
+    name: Notify on PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send notification to n8n
+        run: |
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -u "${{ secrets.N8N_USERNAME }}:${{ secrets.N8N_PASSWORD }}" \
+            -d '{"notification": "新的 PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}\n作者: ${{ github.event.pull_request.user.login }}\n分支: ${{ github.event.pull_request.head.ref }} -> ${{ github.event.pull_request.base.ref }}\n链接: ${{ github.event.pull_request.html_url }}\n操作: ${{ github.event.action }}"}' \
+            "${{ secrets.N8N_WEBHOOK_URL }}"
