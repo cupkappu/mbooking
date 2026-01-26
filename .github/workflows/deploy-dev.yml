@@ -1,0 +1,182 @@
+# Cloudflare SSH Deployment Workflow
+# Deploys to dev server via Cloudflare Zero Trust SSH tunnel
+#
+# Triggers:
+# - Manual: workflow_dispatch (GitHub Actions UI)
+# - Auto: repository_dispatch (triggered by CI workflow on master/tag)
+
+name: Deploy to Dev Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+      force_rebuild:
+        description: 'Force rebuild images'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+  repository_dispatch:
+    types: [deploy-dev]
+
+env:
+  # Docker registry for images
+  REGISTRY: ghcr.io
+  IMAGE: ${{ github.repository }}
+
+jobs:
+  deploy-dev:
+    name: Deploy to Dev Server
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=sha
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: runner
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.sha }}-backend
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: runner
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.sha }}-frontend
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ============================================
+      # Cloudflare SSH Tunnel Setup
+      # ============================================
+      - name: Install cloudflared
+        uses: ./.github/actions/cloudflared
+        with:
+          version: 2024.11.0
+
+      - name: Create SSH directory
+        run: mkdir -p ~/.ssh
+
+      - name: Add SSH host key
+        run: |
+          echo "${{ secrets.DEPLOY_NODE_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Set SSH permissions
+        run: chmod 600 ~/.ssh/id_ed25519
+
+      - name: Write private key
+        run: |
+          echo "${{ secrets.DEPLOY_NODE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      # ============================================
+      # Deploy via Cloudflare Tunnel SSH
+      # ============================================
+      - name: Deploy to dev server via Cloudflare SSH
+        run: |
+          # Start cloudflared tunnel in background
+          cloudflared access tcp \
+            --hostname ${{ secrets.DEPLOY_NODE_CF_TUNNEL_HOST }} \
+            --url ssh://localhost:2222 \
+            &
+          CF_PID=$!
+
+          # Wait for tunnel to establish
+          sleep 5
+
+          # SSH through the tunnel and execute deploy commands
+          ssh -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o BatchMode=yes \
+            -o ConnectTimeout=30 \
+            -p 2222 \
+            ${{ secrets.DEPLOY_NODE_USER }}@localhost << 'DEPLOY_EOF'
+
+            set -e
+
+            echo "=== Starting deployment on dev server ==="
+            echo "Working directory: ${{ secrets.DEPLOY_NODE_PATH }}"
+
+            # Change to project directory
+            cd ${{ secrets.DEPLOY_NODE_PATH }}
+
+            # Pull latest images
+            echo "=== Pulling latest images ==="
+            docker-compose -f docker-compose.test.yml pull
+
+            # Update image tags to current sha
+            echo "=== Updating image tags ==="
+            docker-compose -f docker-compose.test.yml \
+              pull backend_test frontend_test
+            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.sha }}-backend \
+              $(docker-compose -f docker-compose.test.yml config | grep 'image:' | head -1 | awk '{print $2}' | sed 's/_test//')
+            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.sha }}-frontend \
+              $(docker-compose -f docker-compose.test.yml config | grep 'image:' | tail -1 | awk '{print $2}' | sed 's/_test//')
+
+            # Stop existing containers
+            echo "=== Stopping existing containers ==="
+            docker-compose -f docker-compose.test.yml down || true
+
+            # Start services
+            echo "=== Starting services ==="
+            docker-compose -f docker-compose.test.yml up -d
+
+            # Wait for services to be healthy
+            echo "=== Waiting for services to be healthy ==="
+            for i in {1..60}; do
+              if docker-compose -f docker-compose.test.yml ps | grep -q "healthy"; then
+                echo "All services are healthy!"
+                exit 0
+              fi
+              echo "Waiting for services... ($i/60)"
+              sleep 3
+            done
+
+            echo "Deployment completed!"
+          DEPLOY_EOF
+
+          # Cleanup: kill cloudflared tunnel
+          kill $CF_PID || true
