@@ -1,14 +1,15 @@
 # Cloudflare WARP SSH Deployment
 
-Connects GitHub Actions to your private network via Cloudflare Zero Trust WARP, then SSH to dev server.
+Connects GitHub Actions to your private network via Cloudflare WARP, then SSH to dev server.
 
 ## Architecture
 
 ```
 GitHub Actions                      Cloudflare Zero Trust           Dev Server
     |                                     |                             |
-    |  1. warp-cli connect                |                             |
-    |  +------------------------------->  |  WARP tunnel established   |
+    |  1. cloudflared connect             |  WARP tunnel established   |
+    |  +------------------------------->  |  (GitHub Actions joins     |
+    |  |                                 |   your private network)     |
     |  |                                 +--------------------------> |
     |  |  2. ssh deploy@[server-ip]       |                             |
     |  +-----------------------------------------------------------> |
@@ -24,37 +25,21 @@ GitHub Actions                      Cloudflare Zero Trust           Dev Server
 
 ## Step 1: Configure Cloudflare Zero Trust
 
-### 1.1 Create Service Token
+### 1.1 Create WARP Token
 
 1. Go to [Cloudflare Zero Trust](https://one.dash.cloudflare.com/)
-2. Navigate to **Access** > **Service Auth**
-3. Click **Create Service Token**
-4. Configure:
-   - **Name**: `github-actions-deploy`
-   - **Service Token Duration**: As needed
-5. Copy the `Client ID` and `Client Secret`
-6. **Important**: Save the secret - it won't be shown again!
+2. Navigate to **Settings** > **WARP**
+3. Scroll to **Client enumeration** section
+4. Copy the **WARP service token** (or create a new one if needed)
 
-### 1.2 Get Organization Name
+### 1.2 Get Team ID (Optional)
 
 1. Go to **Settings** > **General**
-2. Copy the **Organization name** (e.g., `mycompany`)
-
-### 1.3 Create Enrollment Policy
-
-1. Go to **Devices** > **Enrollment**
-2. Click **Add a policy**
-3. Configure:
-   - **Name**: `Allow GitHub Actions`
-   - **Action**: Service Auth
-   - **Selector**: Service Token
-   - **Value**: Select your service token `github-actions-deploy`
+2. Copy the **Team ID** (e.g., `abcdef123456`)
 
 ## Step 2: Prepare Dev Server
 
 ### 2.1 SSH Configuration
-
-Ensure your dev server accepts SSH connections:
 
 ```bash
 # /etc/ssh/sshd_config
@@ -67,21 +52,15 @@ AllowUsers deploy
 ### 2.2 Create Deployment User
 
 ```bash
-# Create a dedicated user
 sudo adduser deploy
 sudo usermod -aG docker deploy
-
-# Set permissions
 sudo chown -R deploy:deploy /opt/multi-currency-accounting
 ```
 
 ## Step 3: Generate SSH Keys
 
 ```bash
-# Generate ED25519 key (no passphrase for CI)
 ssh-keygen -t ed25519 -C "github-actions@github.com" -f github-actions-key
-
-# Add public key to server
 cat github-actions-key.pub >> /home/deploy/.ssh/authorized_keys
 ```
 
@@ -91,9 +70,7 @@ Go to **Settings > Secrets and variables > Actions**:
 
 | Secret | Description | Example |
 |--------|-------------|---------|
-| `CLOUDFLARE_ORG` | Zero Trust organization name | `mycompany` |
-| `CLOUDFLARE_AUTH_CLIENT_ID` | Service token Client ID | `abc123...` |
-| `CLOUDFLARE_AUTH_CLIENT_SECRET` | Service token Client Secret | `xyz789...` |
+| `CLOUDFLARE_WARP_TOKEN` | WARP service token | `eyJh...` |
 | `DEPLOY_NODE_USER` | SSH username | `deploy` |
 | `DEPLOY_NODE_ADDR` | Server IP (private network) | `192.168.1.100` |
 | `DEPLOY_NODE_PATH` | Project directory | `/opt/multi-currency-accounting` |
@@ -108,49 +85,49 @@ ssh-keyscan -t ed25519 192.168.1.100
 
 ## How It Works
 
-1. **setup-cloudflare-warp** installs WARP client
-2. **warp-cli connect** connects GitHub Actions to your private network via WARP
-3. **ssh deploy@[server-ip]** SSH directly to server (now reachable)
-4. **docker-compose** pulls images from GHCR and starts services
+1. **cloudflared** is installed on GitHub Actions runner
+2. **cloudflared warp-svc login --token** authenticates with Cloudflare
+3. **cloudflared connect** creates a tunnel - GitHub Actions is now "inside" your private network
+4. **ssh deploy@[server-ip]** SSH directly to server (now reachable)
+5. **docker-compose** pulls images from GHCR and starts services
 
 ## Testing
-
-### Manual Test
-
-```bash
-# Run workflow manually
-gh workflow run deploy-dev.yml -f environment=dev
-```
 
 ### Local Test
 
 ```bash
-# Install warp-cli
-curl -L -o /tmp/cloudflared.deb \
-  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-sudo dpkg -i /tmp/cloudflared.deb
+# Install cloudflared
+curl -L -o /usr/local/bin/cloudflared \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+chmod +x /usr/local/bin/cloudflared
 
-# Connect to WARP using service token
-warp-cli login --organization-name mycompany --auth-client-id abc123... --auth-client-secret xyz789...
-warp-cli connect
+# Connect to WARP
+cloudflared warp-svc login --token your-warp-token
+cloudflared connect
 
 # SSH to dev server
 ssh deploy@192.168.1.100
+
+# Disconnect when done
+cloudflared disconnect
 ```
 
 ## Troubleshooting
 
-### WARP Connection Fails
+### Connection Fails
 
 ```bash
-# Check warp-cli status
-warp-cli status
+# Check cloudflared status
+cloudflared warp-svc status
 
-# Verify API token
-warp-cli account
+# Verify token
+cloudflared warp-svc login --token your-token
 
 # Check logs
 journalctl -u cloudflared
+
+# or for the connect command
+cloudflared connect --logfile /tmp/cloudflared.log --loglevel debug
 ```
 
 ### SSH Connection Refused
@@ -162,7 +139,7 @@ ping 192.168.1.100
 # Check SSH is running
 ssh deploy@192.168.1.100 -v
 
-# Verify firewall rules
+# Verify firewall
 sudo ufw status
 ```
 
@@ -170,11 +147,11 @@ sudo ufw status
 
 ```bash
 # Ensure WARP is connected
-warp-cli status | grep Connected
+cloudflared warp-svc status | grep Connected
 
-# Check network routes
+# Check if routing is working
 ip route
 
-# Verify Zero Trust settings
-# Go to Zero Trust > Settings > WARP
+# Verify WARP tunnel
+cloudflared tunnel list
 ```
