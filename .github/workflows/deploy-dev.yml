@@ -57,7 +57,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
 
       - name: Setup Tailscale
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@v2
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
