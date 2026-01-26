@@ -5,10 +5,10 @@
  * Full Docker build and integration tests run in CI pipeline.
  */
 
-import { describe, it, expect, beforeAll } from '@jest/globals';
+import { describe, it, expect } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
-const YAML = require('yaml');
+import * as YAML from 'yaml';
 
 // Use relative paths from backend directory (where tests run from)
 const BACKEND_DIR = path.resolve(__dirname, '..');
