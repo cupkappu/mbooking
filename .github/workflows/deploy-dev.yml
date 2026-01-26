@@ -1,5 +1,5 @@
 # Cloudflare WARP SSH Deployment
-# Connects to Cloudflare network via WARP, then SSH directly to server IP
+# Pulls pre-built images from GHCR and deploys to dev server
 #
 # Triggers:
 # - Manual: workflow_dispatch (GitHub Actions UI)
@@ -18,14 +18,16 @@ on:
         options:
           - dev
           - staging
-      force_rebuild:
-        description: 'Force rebuild images'
+      backend_image:
+        description: 'Backend image tag (default: latest)'
         required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
+        default: ''
+        type: string
+      frontend_image:
+        description: 'Frontend image tag (default: latest)'
+        required: false
+        default: ''
+        type: string
   repository_dispatch:
     types: [deploy-dev]
 
@@ -42,54 +44,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container registry
-        uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          sparse-checkout: |
+            docker-compose.test.yml
+            scripts
 
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
-          tags: |
-            type=ref,event=branch
-            type=sha
-
-      - name: Build and push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          target: runner
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.sha }}-backend
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          target: runner
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.sha }}-frontend
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # ============================================
-      # Cloudflare WARP Setup
-      # ============================================
       - name: Install cloudflared
         uses: ./.github/actions/cloudflared
         with:
@@ -103,9 +62,6 @@ jobs:
           echo "${{ secrets.DEPLOY_NODE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
-      # ============================================
-      # Connect to Cloudflare WARP and SSH
-      # ============================================
       - name: Deploy via Cloudflare WARP
         run: |
           # Connect to Cloudflare network via WARP
@@ -116,23 +72,32 @@ jobs:
             -o UserKnownHostsFile=/dev/null \
             -o BatchMode=yes \
             -o ConnectTimeout=30 \
-            ${{ secrets.DEPLOY_NODE_USER }}@${{ secrets.DEPLOY_NODE_ADDR }} << 'DEPLOY_EOF'
-
+            ${{ secrets.DEPLOY_NODE_USER }}@${{ secrets.DEPLOY_NODE_ADDR }} << EOF
             set -e
 
             echo "=== Starting deployment on dev server ==="
             echo "Working directory: ${{ secrets.DEPLOY_NODE_PATH }}"
+            echo "Using images from: ${{ env.REGISTRY }}/${{ env.IMAGE }}"
 
             cd ${{ secrets.DEPLOY_NODE_PATH }}
 
-            echo "=== Pulling latest images ==="
-            docker-compose -f docker-compose.test.yml pull
+            # Determine image tags
+            BACKEND_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.backend_image || 'latest' }}"
+            FRONTEND_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.frontend_image || 'latest' }}"
 
-            echo "=== Tagging images ==="
-            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.sha }}-backend \
-              $(docker-compose -f docker-compose.test.yml config | grep 'image:' | head -1 | awk '{print $2}' | sed 's/_test//')
-            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.sha }}-frontend \
-              $(docker-compose -f docker-compose.test.yml config | grep 'image:' | tail -1 | awk '{print $2}' | sed 's/_test//')
+            echo "=== Pulling backend image: \$BACKEND_TAG ==="
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE }}:\${BACKEND_TAG}-backend || true
+
+            echo "=== Pulling frontend image: \$FRONTEND_TAG ==="
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE }}:\${FRONTEND_TAG}-frontend || true
+
+            # Get the image names from docker-compose config
+            COMPOSE_BACKEND=\$(docker-compose -f docker-compose.test.yml config | grep 'image:' | head -1 | awk '{print \$2}')
+            COMPOSE_FRONTEND=\$(docker-compose -f docker-compose.test.yml config | grep 'image:' | tail -1 | awk '{print \$2}')
+
+            echo "=== Tagging images for compose ==="
+            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE }}:\${BACKEND_TAG}-backend \$COMPOSE_BACKEND
+            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE }}:\${FRONTEND_TAG}-frontend \$COMPOSE_FRONTEND
 
             echo "=== Stopping existing containers ==="
             docker-compose -f docker-compose.test.yml down || true
@@ -144,11 +109,13 @@ jobs:
             for i in {1..60}; do
               if docker-compose -f docker-compose.test.yml ps | grep -q "healthy"; then
                 echo "All services are healthy!"
+                docker-compose -f docker-compose.test.yml ps
                 exit 0
               fi
-              echo "Waiting for services... ($i/60)"
+              echo "Waiting for services... (\$i/60)"
               sleep 3
             done
 
-            echo "Deployment completed!"
-          DEPLOY_EOF
+            echo "Deployment completed (timeout reached)"
+            docker-compose -f docker-compose.test.yml ps
+          EOF
