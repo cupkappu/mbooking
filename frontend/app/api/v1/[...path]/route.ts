@@ -54,6 +54,8 @@ async function proxyRequest(request: NextRequest, path: string[]) {
       body: request.body,
       cache: 'no-store',
       redirect: 'manual',
+      // @ts-expect-error - duplex is required for streaming requests in modern browsers
+      duplex: 'half',
     });
 
     const responseHeaders = new Headers();

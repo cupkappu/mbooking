@@ -41,6 +41,8 @@ const initializeApi = async (
       'X-Init-Secret': initSecret,
     },
     body: JSON.stringify(data),
+    // @ts-expect-error - duplex is required for streaming requests in modern browsers
+    duplex: 'half',
   });
 };
 

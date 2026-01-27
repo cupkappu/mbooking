@@ -102,6 +102,8 @@ class ApiClient {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: JSON.stringify(body),
+      // @ts-expect-error - duplex is required for streaming requests in modern browsers
+      duplex: 'half',
     });
   }
 
@@ -109,6 +111,8 @@ class ApiClient {
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: JSON.stringify(body),
+      // @ts-expect-error - duplex is required for streaming requests in modern browsers
+      duplex: 'half',
     });
   }
 
