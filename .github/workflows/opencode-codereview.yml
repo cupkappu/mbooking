@@ -1,0 +1,47 @@
+name: opencode
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  opencode:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run opencode
+        uses: anomalyco/opencode/github@latest
+        env:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+        with:
+          model: minimax-cn-coding-plan/MiniMax-M2.1
+          prompt: |
+            You are an expert software developer. Your task is to analyze the following pull request and provide a detailed coding plan for implementing the requested changes. The coding plan should include the following sections:
+
+            1. Summary: A brief overview of the changes needed.
+            2. Tasks: A list of specific tasks that need to be completed, each with a clear description.
+            3. File Changes: A list of files that will be affected by the changes, along with a brief description of what will be changed in each file.
+            4. Estimated Time: An estimate of how long each task will take to complete.
+
+            Please ensure that the coding plan is clear, concise, and easy to follow.
+
+            Here is the pull request description and any relevant comments:
+
+            Pull Request Description:
+            ```
+            {{PR_DESCRIPTION}}
+            ```
+
+            Relevant Comments:
+            ```
+            {{COMMENTS}}
+            ```
