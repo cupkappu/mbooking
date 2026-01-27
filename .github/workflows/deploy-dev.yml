@@ -82,7 +82,6 @@ jobs:
 
             echo "=== Starting deployment on dev server ==="
             echo "Working directory: ${{ secrets.DEPLOY_NODE_PATH }}"
-            echo "Using images from: ${{ env.REGISTRY }}/${{ env.IMAGE }}"
 
             mkdir -p ${{ secrets.DEPLOY_NODE_PATH }}
 
@@ -99,10 +98,10 @@ jobs:
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE }}:\${FRONTEND_TAG}-frontend || true
 
             echo "=== Stopping existing containers ==="
-            GITHUB_REPOSITORY=${{ env.REGISTRY }} BACKEND_TAG=\$BACKEND_TAG FRONTEND_TAG=\$FRONTEND_TAG docker compose -f docker-compose.prod.yml down || true
+            BACKEND_TAG=\$BACKEND_TAG FRONTEND_TAG=\$FRONTEND_TAG docker compose -f docker-compose.prod.yml down || true
 
             echo "=== Starting services ==="
-            GITHUB_REPOSITORY=${{ env.REGISTRY }} BACKEND_TAG=\$BACKEND_TAG FRONTEND_TAG=\$FRONTEND_TAG docker compose -f docker-compose.prod.yml up -d
+            BACKEND_TAG=\$BACKEND_TAG FRONTEND_TAG=\$FRONTEND_TAG docker compose -f docker-compose.prod.yml up -d
 
             echo "=== Waiting for services to be healthy ==="
             for i in {1..60}; do
