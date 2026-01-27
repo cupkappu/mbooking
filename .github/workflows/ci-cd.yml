@@ -15,7 +15,7 @@ env:
 
 jobs:
   # ============================================
-  # Stage 1: Build & Verify
+  # Stage 1: Build & Verify (amd64 only for testing)
   # ============================================
   build-and-verify:
     name: Build & Verify
@@ -23,6 +23,7 @@ jobs:
 
     permissions:
       contents: read
+      packages: read
 
     services:
       postgres:
@@ -74,6 +75,18 @@ jobs:
           tags: frontend:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Save images for E2E tests
+        run: |
+          docker save backend:test frontend:test -o backend-frontend-test.tar
+          gzip backend-frontend-test.tar
+
+      - name: Upload test images
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-images
+          path: backend-frontend-test.tar.gz
+          retention-days: 1
 
       - name: Verify backend image
         run: |
@@ -198,7 +211,7 @@ jobs:
           echo "✅ Backend tests completed"
 
   # ============================================
-  # Stage 3: E2E Tests
+  # Stage 3: E2E Tests (reuse images from build-and-verify)
   # ============================================
   e2e-test:
     name: E2E Tests
@@ -238,19 +251,38 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download test images
+        uses: actions/download-artifact@v4
+        with:
+          name: test-images
+          path: .
+
+      - name: Load test images
+        run: |
+          gunzip -c backend-frontend-test.tar.gz | docker load
+          docker images | grep -E "backend:test|frontend:test"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build test images
+      - name: Create docker-compose.override.yml for E2E
         run: |
-          docker compose -f docker-compose.test.yml build backend_test frontend_test
+          cat > docker-compose.override.yml << 'EOF'
+          services:
+            backend_test:
+              image: backend:test
+              volumes:
+                - ./test-results:/app/test-results
+            frontend_test:
+              image: frontend:test
+          EOF
 
       - name: Start test environment
         run: |
-          docker compose -f docker-compose.test.yml up -d
+          docker compose -f docker-compose.test.yml -f docker-compose.override.yml up -d
           # Wait for services to be healthy
           for i in {1..60}; do
-            if docker compose -f docker-compose.test.yml ps | grep -q "healthy"; then
+            if docker compose -f docker-compose.test.yml -f docker-compose.override.yml ps | grep -q "healthy"; then
               echo "All services are healthy!"
               exit 0
             fi
@@ -258,7 +290,7 @@ jobs:
             sleep 3
           done
           echo "Services not ready"
-          docker compose -f docker-compose.test.yml logs
+          docker compose -f docker-compose.test.yml -f docker-compose.override.yml logs
           exit 1
 
       - name: Install Playwright
@@ -286,7 +318,7 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: docker compose -f docker-compose.test.yml down
+        run: docker compose -f docker-compose.test.yml -f docker-compose.override.yml down
 
   # ============================================
   # Stage 4: Deploy (only on master/tag)
