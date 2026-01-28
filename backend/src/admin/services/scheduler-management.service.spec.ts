@@ -5,7 +5,7 @@ import { SchedulerManagementService } from './scheduler-management.service';
 import { Provider, ProviderType } from '../../rates/provider.entity';
 import { ExchangeRate } from '../../rates/exchange-rate.entity';
 import { AuditLog } from '../entities/audit-log.entity';
-import { RateGraphEngine } from '../../rates/rate-graph-engine';
+import { RateGraphEngine } from '../../rates/services/rate-graph.engine';
 import { AuditEventPublisher } from '../events/audit-event-publisher.service';
 
 describe('SchedulerManagementService', () => {

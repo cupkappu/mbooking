@@ -10,7 +10,7 @@ import { QueryService } from './query.service';
 import { Account, AccountType } from '../accounts/account.entity';
 import { JournalEntry } from '../journal/journal-entry.entity';
 import { JournalLine } from '../journal/journal-line.entity';
-import { RateGraphEngine } from '../rates/rate-graph-engine';
+import { RateGraphEngine } from '../rates/services/rate-graph.engine';
 import { TenantsService } from '../tenants/tenants.service';
 
 // Helper for running tests with tenant context
