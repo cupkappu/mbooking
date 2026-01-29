@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, forwardRef, Inject } from '@nestjs/common';
+import { RateFetchService } from './rate-fetch.service';
 
 /**
  * 图边
@@ -44,6 +45,11 @@ export interface PathResult {
 @Injectable()
 export class RateGraphEngine {
   private readonly logger = new Logger(RateGraphEngine.name);
+
+  constructor(
+    @Inject(forwardRef(() => RateFetchService))
+    private rateFetchService: RateFetchService,
+  ) {}
 
   /**
    * 构建汇率图
@@ -424,7 +430,7 @@ export class RateGraphEngine {
     from: string,
     to: string,
     options: { date?: Date } = {}
-  ): Promise<{ rate: number }> {
+  ): Promise<{ rate: number } | undefined> {
     const fromUpper = from.toUpperCase();
     const toUpper = to.toUpperCase();
 
@@ -432,17 +438,39 @@ export class RateGraphEngine {
       return { rate: 1 };
     }
 
+    // 如果 globalGraph 为空，尝试初始化
+    if (this.globalGraph.nodes.size === 0) {
+      await this.initializeGraphIfNeeded(fromUpper, toUpper, options.date);
+    }
+
     // 直接查找边
     const edge = this.getDirectEdge(this.getGlobalGraph(), fromUpper, toUpper);
-    
+
     if (edge) {
       return { rate: edge.rate };
     }
 
     // 查找路径
     const pathResult = this.findBestPath(this.getGlobalGraph(), fromUpper, toUpper);
-    
-    return { rate: pathResult?.totalRate || 1 };
+
+    if (pathResult) {
+      return { rate: pathResult.totalRate };
+    }
+
+    // 找不到汇率，返回 undefined
+    return undefined;
+  }
+
+  /**
+   * 初始化 graph（懒加载）
+   */
+  private async initializeGraphIfNeeded(from: string, to: string, date?: Date): Promise<void> {
+    try {
+      // 获取 from 到 to 的汇率，会自动同步到 globalGraph
+      await this.rateFetchService.getRate({ from, to, date, useCache: true });
+    } catch (error) {
+      this.logger.warn(`Failed to initialize graph for ${from}->${to}: ${error}`);
+    }
   }
 
   /**

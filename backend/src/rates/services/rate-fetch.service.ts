@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, forwardRef, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RateProvider, ProviderConfig } from '../interfaces/rate-provider.interface';
@@ -61,6 +61,7 @@ export class RateFetchService implements OnModuleInit {
   constructor(
     private cacheService: RateCacheService,
     private storageService: RateStorageService,
+    @Inject(forwardRef(() => RateGraphEngine))
     private graphEngine: RateGraphEngine,
     private monitorService: RateMonitorService,
     @InjectRepository(Provider)
@@ -72,8 +73,9 @@ export class RateFetchService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     // 从数据库加载 Providers
     await this.loadProviders();
-    
+
     this.logger.log(`Loaded ${this.providers.length} rate providers`);
+    // 注意：不在此处初始化 globalGraph，等第一次查询汇率时再初始化
   }
 
   /**
@@ -208,6 +210,12 @@ export class RateFetchService implements OnModuleInit {
 
     // 6. 构建图 + 路径查找
     const graph = this.graphEngine.buildGraph(rates, from, usedProviderId);
+
+    // 同步到 globalGraph，让图引擎的 getRate() 能正常工作
+    const globalGraph = this.graphEngine.getGlobalGraph();
+    const mergedGraph = this.graphEngine.mergeGraphs([globalGraph, graph]);
+    this.graphEngine.setGlobalGraph(mergedGraph);
+
     const pathResult = this.graphEngine.findBestPath(graph, from, to, { maxHops: 5 });
 
     let finalRate: number;

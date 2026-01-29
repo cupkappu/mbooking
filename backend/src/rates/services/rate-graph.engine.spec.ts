@@ -1,11 +1,26 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RateGraphEngine, RateEdge, RateGraph, PathResult } from './rate-graph.engine';
+import { RateFetchService } from './rate-fetch.service';
 
 describe('RateGraphEngine', () => {
   let engine: RateGraphEngine;
 
-  beforeEach(() => {
-    engine = new RateGraphEngine();
+  beforeEach(async () => {
+    const mockRateFetchService = {
+      getRate: jest.fn().mockResolvedValue({ rate: 0.92 }),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        RateGraphEngine,
+        {
+          provide: RateFetchService,
+          useValue: mockRateFetchService,
+        },
+      ],
+    }).compile();
+
+    engine = module.get<RateGraphEngine>(RateGraphEngine);
   });
 
   describe('buildGraph', () => {
